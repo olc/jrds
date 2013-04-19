@@ -1,0 +1,37 @@
+#!/usr/bin/make -f
+# -*- makefile -*-
+# Uncomment this to turn on verbose mode.
+#export DH_VERBOSE=1
+
+# This has to be exported to make some magic below work.
+export DH_OPTIONS
+
+export JAVA_HOME=/usr/lib/jvm/default-java
+export CLASSPATH=/usr/share/java/ivy.jar
+
+%:
+	dh --with javahelper $@
+
+override_dh_auto_clean:
+	ant clean
+	rm -rf debian/jrds-common debian/jrds-jetty
+
+override_dh_auto_build:
+	# jrds-jetty
+	echo 'appserv.home = .' >local.properties
+	echo 'appserv.servlet-api = $${appserv.home}/libjetty' >>local.properties
+	ant resolve
+	ant
+	ant jetty
+	rm -f local.properties
+	mkdir -p debian/targets/jrds-jetty
+	mv build/jrds.tar debian/targets/jrds-jetty/
+
+override_dh_install:
+	# jrds-jetty
+	mkdir -p debian/jrds-jetty/usr/share/jrds/web
+	tar xpf debian/targets/jrds-jetty/jrds.tar -C debian/jrds-jetty/usr/share/jrds/web
+	rm -rf debian/targets
+	dh_install
+
+#override_jh_build:

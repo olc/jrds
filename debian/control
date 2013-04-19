@@ -1,0 +1,22 @@
+Source: jrds
+Section: net
+Priority: optional
+Maintainer: Olivier Le Cam <olivier.lecam@crdp.ac-versailles.fr>
+Build-Depends: debhelper (>= 7.0.50~), javahelper, default-jdk, ant
+Standards-Version: 3.9.2
+Homepage: http://www.jrds.fr
+#Vcs-Git: git://git.debian.org/collab-maint/jrds.git
+#Vcs-Browser: http://git.debian.org/?p=collab-maxint/jrds.git;a=summary
+
+Package: jrds-common
+Architecture: all
+Depends: ${shlibs:Depends}, ${misc:Depends}, ${java:Depends}, adduser
+Recommends: ${java:Recommends}
+Description: <insert up to 60 chars description>
+ <insert long description, indented with spaces>
+
+Package: jrds-jetty
+Architecture: all
+Depends: jrds-common
+Description: <insert up to 60 chars description>
+ <insert long description, indented with spaces>

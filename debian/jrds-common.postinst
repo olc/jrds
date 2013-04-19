@@ -1,0 +1,37 @@
+#!/bin/bash
+
+set -e
+
+case "$1" in
+	configure)
+		[ -r /etc/default/jrds ] && . /etc/default/jrds
+		: ${JRDS_USER:=jrds}
+
+		if ! id $JRDS_USER > /dev/null 2>&1 ; then
+			adduser --system --home /var/lib/jrds --no-create-home \
+				--ingroup nogroup --disabled-password --shell /usr/sbin/nologin \
+				$JRDS_USER
+		fi
+
+		mkdir -p /etc/jrds/{graphs,probes,hosts} \
+			/var/lib/jrds/data \
+			/var/log/jrds
+		chown $JRDS_USER /etc/jrds/hosts
+		chown -R $JRDS_USER:adm /var/lib/jrds \
+			/var/log/jrds
+		chmod 755 /etc/jrds \
+			/etc/jrds/{graphs,probes,hosts}
+		chmod 750 /var/lib/jrds \
+			/var/log/jrds
+	;;
+
+	abort-upgrade|abort-remove|abort-deconfigure)
+	;;
+
+	*)
+		echo "postinst called with unknown argument \`$1'" >&2
+		exit 1
+	;;
+esac
+
+#DEBHELPER#
