@@ -2,7 +2,8 @@ Source: jrds
 Section: net
 Priority: optional
 Maintainer: Olivier Le Cam <olivier.lecam@crdp.ac-versailles.fr>
-Build-Depends: debhelper (>= 7.0.50~), javahelper, default-jdk, ant
+Build-Depends: debhelper (>= 7.0.50~)
+Build-Depends-Indep: javahelper, openjdk-6-jdk | openjdk-7-jdk, ant, ivy
 Standards-Version: 3.9.2
 Homepage: http://www.jrds.fr
 #Vcs-Git: git://git.debian.org/collab-maint/jrds.git
@@ -10,13 +11,21 @@ Homepage: http://www.jrds.fr
 
 Package: jrds-common
 Architecture: all
-Depends: ${shlibs:Depends}, ${misc:Depends}, ${java:Depends}, adduser
+Depends: ${shlibs:Depends}, ${misc:Depends}, ${java:Depends}, adduser, default-jre-headless | java6-runtime-headless
 Recommends: ${java:Recommends}
-Description: <insert up to 60 chars description>
- <insert long description, indented with spaces>
+Description: Jrds is performance collector, much like cacti or munins
+ Jrds is performance collector, much like cacti or munins. But it intends to be more
+ easy to use and able to collect a high number of machines in a very short time. It's
+ fully written in java and avoid call external process to increase performances. It
+ uses RRD4J, a clone of rrdtool written in java.
 
 Package: jrds-jetty
 Architecture: all
-Depends: jrds-common
-Description: <insert up to 60 chars description>
- <insert long description, indented with spaces>
+Depends: jrds-common (= ${binary:Version})
+Description: Jrds is performance collector, much like cacti or munins - Jetty integration
+ Jrds is performance collector, much like cacti or munins. But it intends to be more
+ easy to use and able to collect a high number of machines in a very short time. It's
+ fully written in java and avoid call external process to increase performances. It
+ uses RRD4J, a clone of rrdtool written in java.
+ .
+ This package provides the Jetty integration files for JRDS.
