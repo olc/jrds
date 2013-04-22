@@ -3,7 +3,7 @@ Section: net
 Priority: optional
 Maintainer: Olivier Le Cam <olivier.lecam@crdp.ac-versailles.fr>
 Build-Depends: debhelper (>= 7.0.50~)
-Build-Depends-Indep: javahelper, openjdk-6-jdk | openjdk-7-jdk, ant, ivy
+Build-Depends-Indep: javahelper, default-jre-headless, openjdk-6-jdk, ant, ivy
 Standards-Version: 3.9.2
 Homepage: http://www.jrds.fr
 #Vcs-Git: git://git.debian.org/collab-maint/jrds.git
