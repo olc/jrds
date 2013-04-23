@@ -1,0 +1,27 @@
+# defaults for jrds performance collector
+
+# pulled in from the init script; makes things easier.
+NAME=jrds
+
+# location of java
+# JAVA=/usr/bin/java
+
+# arguments to pass to java
+# JAVA_ARGS="-Xmx256m"
+
+# pid file
+# PIDFILE=/var/run/jrds/jrds.pid
+
+# user id to be invoked as
+# JRDS_USER=jrds
+
+# location of the jenkins jar file
+# JRDS_WAR=/usr/share/jrds/web/WEB-INF/lib/boot.jar
+
+# OS LIMITS SETUP
+#   comment this out to observe /etc/security/limits.conf
+#   just in case your server is indeed loaded
+# MAXOPENFILES=8192
+
+# port for HTTP connector (default 8080; disable with -1)
+# HTTP_PORT=8080

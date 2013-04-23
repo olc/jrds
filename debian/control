@@ -11,7 +11,7 @@ Homepage: http://www.jrds.fr
 
 Package: jrds-common
 Architecture: all
-Depends: ${misc:Depends}, adduser, default-jre-headless | java6-runtime-headless
+Depends: ${misc:Depends}, adduser
 Recommends: ${java:Recommends}
 Description: Jrds is performance collector, much like cacti or munins
  Jrds is performance collector, much like cacti or munins. But it intends to be more
@@ -21,7 +21,7 @@ Description: Jrds is performance collector, much like cacti or munins
 
 Package: jrds-jetty
 Architecture: all
-Depends: jrds-common (= ${binary:Version})
+Depends: jrds-common (= ${binary:Version}), daemon, default-jre-headless | java6-runtime-headless
 Description: Jrds is performance collector, much like cacti or munins - Jetty integration
  Jrds is performance collector, much like cacti or munins. But it intends to be more
  easy to use and able to collect a high number of machines in a very short time. It's
