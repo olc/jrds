@@ -1,2 +1,1 @@
-debian/jrds-jetty.init etc/init.d
 debian/jrds-jetty.default etc/default
