@@ -19,7 +19,7 @@ public abstract class Starter {
 		namedLogger = Logger.getLogger("jrds.Starter."  + classElements[classElements.length - 1 ].replaceAll("\\$", ".\\$"));
 	}
 
-	/**
+    /**
 	 * This method is called when the started is really registred<p/>
 	 * It can be overriden to contains delayed initialization but it must begin with a call to super.initialize(parent)
 	 * @param level
@@ -35,6 +35,7 @@ public abstract class Starter {
      * @param pm
      */
     public void configure(PropertiesManager pm) {
+        log(Level.DEBUG, "registred to %s", getLevel());
     }
 
     public final void doStart() {
@@ -58,6 +59,7 @@ public abstract class Starter {
 			stop();
 		}
 	}
+	
 	public boolean start() {
 		return true;
 	}

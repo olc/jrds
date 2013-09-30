@@ -51,13 +51,13 @@ import org.w3c.dom.Element;
 public abstract class Probe<KeyType, ValueType> extends StarterNode implements Comparable<Probe<KeyType, ValueType>>  {
 
     private static final ArcDef[] DEFAULTARC = {
-            new ArcDef(ConsolFun.AVERAGE, 0.5, 1, 12 * 24 * 30 * 3),
-            new ArcDef(ConsolFun.AVERAGE, 0.5, 12, 24 * 365), 
-            new ArcDef(ConsolFun.AVERAGE, 0.5, 288, 365 * 2)
+        new ArcDef(ConsolFun.AVERAGE, 0.5, 1, 12 * 24 * 30 * 3),
+        new ArcDef(ConsolFun.AVERAGE, 0.5, 12, 24 * 365), 
+        new ArcDef(ConsolFun.AVERAGE, 0.5, 288, 365 * 2)
     };
 
     private String name = null;
-    private HostInfo monitoredHost;
+    protected HostInfo monitoredHost;
     private Collection<GraphNode> graphList = new ArrayList<GraphNode>();
     private ProbeDesc pd;
     private long uptime = Long.MAX_VALUE;
@@ -68,7 +68,6 @@ public abstract class Probe<KeyType, ValueType> extends StarterNode implements C
 
     /**
      * A special case constructor, mainly used by virtual probe
-     * @param monitoredHost
      * @param pd
      */
     public Probe(ProbeDesc pd) {
@@ -76,11 +75,6 @@ public abstract class Probe<KeyType, ValueType> extends StarterNode implements C
         setPd(pd);
     }
 
-    /**
-     * A special case constructor, mainly used by virtual probe
-     * @param monitoredHost
-     * @param pd
-     */
     public Probe() {
         super();
     }
@@ -360,8 +354,7 @@ public abstract class Probe<KeyType, ValueType> extends StarterNode implements C
      * It should return return as raw as possible, they can even be opaque data tied to the probe.
      * the key is resolved using the <code>ProbeDesc</code>. A key not associated with an existent datastore will generate a warning
      * but will not prevent the other values to be stored.<br>
-     * the value should be a <code>java.lang.Number<code><br>
-     * @return the map of collected object
+     * @return the map of collected object or null if the collect failed
      */
     public abstract Map<KeyType, ValueType> getNewSampleValues();
 
@@ -425,33 +418,38 @@ public abstract class Probe<KeyType, ValueType> extends StarterNode implements C
     private boolean updateSample(Sample oneSample) {
         if(isCollectRunning()) {
             Map<KeyType, ValueType> sampleVals = getNewSampleValues();
+            return injectSample(oneSample, sampleVals);
+        }
+        return false;
+    }
+
+    public boolean injectSample(Sample oneSample, Map<KeyType, ValueType> sampleVals) {
+        if (sampleVals != null) {
             log(Level.TRACE, "Collected values: %s", sampleVals);
-            if (sampleVals != null) {
-                if(getUptime() * pd.getUptimefactor() >= pd.getHeartBeatDefault()) {
-                    //Set the default values that might be defined in the probe description
-                    for(Map.Entry<String, Double> e: getPd().getDefaultValues().entrySet()) {
-                        oneSample.setValue(e.getKey(), e.getValue());
-                    }
-                    Map<?, String> nameMap = getCollectMapping();
-                    log(Level.TRACE, "Collect keys: %s", nameMap);
-                    Map<KeyType, Number>filteredSamples = filterValues(sampleVals);
-                    log(Level.TRACE, "Filtered values: %s", filteredSamples);
-                    for(Map.Entry<KeyType, Number> e: filteredSamples.entrySet()) {
-                        String dsName = nameMap.get(e.getKey());
-                        double value = e.getValue().doubleValue();
-                        if (dsName != null) {
-                            oneSample.setValue(dsName, value);
-                        }
-                        else {
-                            log(Level.TRACE, "Dropped entry: %s", e.getKey());
-                        }
-                    }
-                    modifySample(oneSample, sampleVals);
-                    return true;
+            if(getUptime() * pd.getUptimefactor() >= pd.getHeartBeatDefault()) {
+                //Set the default values that might be defined in the probe description
+                for(Map.Entry<String, Double> e: getPd().getDefaultValues().entrySet()) {
+                    oneSample.setValue(e.getKey(), e.getValue());
                 }
-                else {
-                    log(Level.INFO, "uptime too low: %f", getUptime() * pd.getUptimefactor());
+                Map<?, String> nameMap = getCollectMapping();
+                log(Level.TRACE, "Collect keys: %s", nameMap);
+                Map<KeyType, Number>filteredSamples = filterValues(sampleVals);
+                log(Level.TRACE, "Filtered values: %s", filteredSamples);
+                for(Map.Entry<KeyType, Number> e: filteredSamples.entrySet()) {
+                    String dsName = nameMap.get(e.getKey());
+                    double value = e.getValue().doubleValue();
+                    if (dsName != null) {
+                        oneSample.setValue(dsName, value);
+                    }
+                    else {
+                        log(Level.TRACE, "Dropped entry: %s", e.getKey());
+                    }
                 }
+                modifySample(oneSample, sampleVals);
+                return true;
+            }
+            else {
+                log(Level.INFO, "uptime too low: %f", getUptime() * pd.getUptimefactor());
             }
         }
         return false;
@@ -678,7 +676,7 @@ public abstract class Probe<KeyType, ValueType> extends StarterNode implements C
     public boolean readSpecific() {
         return true;
     }
-    
+
     /**
      * A probe can override it to extract custom values from the properties.
      * It will be read just after it's created and before configuration.
@@ -686,7 +684,7 @@ public abstract class Probe<KeyType, ValueType> extends StarterNode implements C
      * @param pm
      */
     public void readProperties(PropertiesManager pm) {
-        
+
     }
 
     /**
@@ -717,7 +715,9 @@ public abstract class Probe<KeyType, ValueType> extends StarterNode implements C
     public Document dumpAsXml(boolean sorted) throws ParserConfigurationException, IOException {
         String probeName = getPd().getName();
         String name = getName();
-        String host = getHost().getName();
+        String host = "";
+        if(getHost() != null)
+            host = getHost().getName();
         DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
         DocumentBuilder builder = factory.newDocumentBuilder();
         Document document = builder.newDocument();
@@ -747,7 +747,7 @@ public abstract class Probe<KeyType, ValueType> extends StarterNode implements C
 
         Element graphs = (Element) root.appendChild(document.createElement("graphs"));
         for(GraphNode gn: this.graphList) {
-            String qualifiedGraphName = gn.getQualifieName();
+            String qualifiedGraphName = gn.getQualifiedName();
             Element graph = (Element) graphs.appendChild(document.createElement("graphname"));
             graph.setTextContent(qualifiedGraphName);
             graph.setAttribute("id", String.valueOf(gn.hashCode()));

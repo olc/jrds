@@ -7,7 +7,6 @@ import java.awt.font.FontRenderContext;
 import java.awt.font.LineMetrics;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedList;
@@ -38,13 +37,15 @@ import org.w3c.dom.Element;
 /**
  * A classed used to store the static description of a graph
  * @author Fabrice Bacchella
- * @version $Id$
  */
 public class GraphDesc
 implements Cloneable, WithACL {
     static final private Logger logger = Logger.getLogger(GraphDesc.class);
 
     static public final ConsolFun DEFAULTCF = ConsolFun.AVERAGE;
+
+    //  static final private String manySpace = "123456798ABCDEF0123465798ABCDEF0123456798ABCDEF0123465798ABCDEF0123456798ABCDEF0123465798ABCDEF0";
+    static final private String MANYSPACE = "                                                                      ";
 
     public enum GraphType {
         NONE  {
@@ -202,16 +203,10 @@ implements Cloneable, WithACL {
             public String resolve(GraphNode graph) {
                 return graph.getProbe().getHost().getName();
             }
-            public String toString() {
-                return "HOST";
-            }
         },
         TITLE {
             public String resolve(GraphNode graph) {
                 return graph.getGraphTitle();
-            }
-            public String toString() {
-                return "TITLE";
             }
         },
         INDEX {
@@ -232,9 +227,6 @@ implements Cloneable, WithACL {
                 }
                 return retValue.toString();
             }
-            public String toString() {
-                return "INDEX";
-            }
         },
         URL {
             public String resolve(GraphNode graph) {
@@ -245,16 +237,10 @@ implements Cloneable, WithACL {
                 }
                 return url;
             }
-            public String toString() {
-                return "URL";
-            }
         },
         JDBC {
             public String resolve(GraphNode graph) {
                 return ( (JdbcProbe) graph.getProbe()).getUrlAsString();
-            }
-            public String toString() {
-                return "JDBC";
             }
         },
         DISK {
@@ -291,7 +277,6 @@ implements Cloneable, WithACL {
             public String resolve(GraphNode graph) {
                 return "Disk activity";
             }
-            public String toString() {return "DISKACTIVITY";}
         },
         WEB {
             public String resolve(GraphNode graph) {
@@ -323,15 +308,8 @@ implements Cloneable, WithACL {
                 JdbcProbe dbprobe = (JdbcProbe) graph.getProbe();
                 return dbprobe.getUrlAsString();
             }
-            @Override
-            public String toString() {
-                return "DBINSTANCE";
-            }
         };
         public abstract String resolve(GraphNode graph);
-        public String toString() {
-            return resolve(null).toUpperCase();
-        }
     }
 
     static final public PathElement HOST = PathElement.HOST;
@@ -507,20 +485,24 @@ implements Cloneable, WithACL {
     };
 
     static private final class DsDesc {
-        public final String name;
-        public String dsName = null;
-        public String rpn = null;
-        public GraphType graphType;
-        public Color color;
-        public String legend = null;
-        public ConsolFun cf = null;
-        public Integer percentile = null;
-        public static final class DsPath  {
-            String host;
-            String probe;
+        final String name;
+        final String dsName;
+        final String rpn;
+        final GraphType graphType;
+        final Color color;
+        final String legend;
+        final ConsolFun cf;
+        final Integer percentile;
+        static final class DsPath  {
+            public final String host;
+            public final String probe;
+            DsPath(String host, String probe) {
+                this.host = host;
+                this.probe = probe;
+            }
         };
-        public DsPath dspath = null;
-        public DsDesc(String name, String dsName, String rpn,
+        final DsPath dspath;
+        DsDesc(String name, String dsName, String rpn,
                 GraphType graphType, Color color, String legend,
                 ConsolFun cf, String host, String probe) {
             this.name = name;
@@ -532,9 +514,10 @@ implements Cloneable, WithACL {
             this.legend = legend;
             this.cf = cf;
             if(host != null && probe != null) {
-                this.dspath = new DsPath();
-                dspath.host = host;
-                dspath.probe = probe;
+                this.dspath = new DsPath(host, probe);
+            }
+            else {
+                this.dspath = null;
             }
         }
         public DsDesc(String name, String rpn,
@@ -544,6 +527,10 @@ implements Cloneable, WithACL {
             this.graphType = graphType;
             this.color = color;
             this.legend = legend;
+            this.dsName = null;
+            this.cf = null;
+            this.percentile = null;
+            this.dspath = null;
         }
         public DsDesc(String name, String dsName,
                 Integer percentile,
@@ -553,6 +540,10 @@ implements Cloneable, WithACL {
             this.percentile = percentile;
             this.graphType = graphType;
             this.color = color;
+            this.rpn = null;
+            this.legend = null;
+            this.cf = null;
+            this.dspath = null;
         }
         public DsDesc(String dsName, GraphType graphType, String legend, ConsolFun cf) {
             this.name = dsName;
@@ -560,14 +551,16 @@ implements Cloneable, WithACL {
             this.graphType = graphType;
             this.legend = legend;
             this.cf = cf;
+            this.rpn = null;
+            this.color = null;
+            this.percentile = null;
+            this.dspath = null;
         }
         public String toString() {
             return "DsDesc(" + name + "," + dsName + ",\"" + (rpn == null ? "" : rpn) + "\"," + graphType + "," + color + ",\"" + (legend == null ? "" : legend) + "\"," + cf + ")";
         }
     }
 
-    //	static final private String manySpace = "123456798ABCDEF0123465798ABCDEF0123456798ABCDEF0123465798ABCDEF0123456798ABCDEF0123465798ABCDEF0";
-    static final private String manySpace = "                                                                      ";
     private List<DsDesc> allds;
     private int width = 578;
     private int height = 206;
@@ -576,11 +569,9 @@ implements Cloneable, WithACL {
     private String verticalLabel = null;
     private int lastColor = 0;
     private Map<String, List<?>> trees = new HashMap<String, List<?>>(2);
-    //private List<?> viewTree = new ArrayList<Object>();
-    //private List<?> hostTree = new ArrayList<Object>();
     private String graphName;
     private String name;
-    private String graphTitle ="{0} on ${host}";
+    private String graphTitle ="${graphdesc.name} on ${host}";
     private int maxLengthLegend = 0;
     private boolean siUnit = true;
     private boolean logarithmic = false;
@@ -609,62 +600,9 @@ implements Cloneable, WithACL {
         allds = new ArrayList<DsDesc>();
     }
 
-    /**
-     * add a graph element
-     *
-     * @param name String
-     * @param graphType GraphType
-     * @param color Color
-     */
-    public void add(String name, GraphType graphType, Color color) {
-        add(name, name, null, graphType, color, name, DEFAULTCF, false, null, null, null);
-    }
-
-    public void add(String name, GraphType graphType, Color color,
-            String legend) {
-        add(name, name, null, graphType, color, legend, DEFAULTCF, false, null, null, null);
-    }
-
-    public void add(String name, GraphType graphType, String legend) {
-        add(name, name, null, graphType,
-                Colors.resolveIndex(lastColor), legend,
-                DEFAULTCF, false, null, null, null);
-        if(graphType.toPlot())
-            lastColor++;
-    }
-
     public void add(String name, GraphType graphType) {
         add(name, name, null, graphType,
                 Colors.resolveIndex(lastColor), name,
-                DEFAULTCF, false, null, null, null);
-        if(graphType.toPlot())
-            lastColor++;
-    }
-
-    /**
-     * Used to add a line in the legend
-     *
-     * @param graphType GraphType
-     * @param legend String
-     */
-    public void add(GraphType graphType, String legend) {
-        add(null, null, null, graphType, null, legend, null, false, null, null, null);
-    }
-
-    public void add(String name, String rpn, GraphType graphType, Color color,
-            String legend) {
-        add(name, null, rpn, graphType, color, legend,
-                DEFAULTCF, false, null, null, null);
-    }
-
-    public void add(String name, String rpn, GraphType graphType, Color color) {
-        add(name, null, rpn, graphType, color, name,
-                DEFAULTCF, false, null, null, null);
-    }
-
-    public void add(String name, String rpn, GraphType graphType, String legend) {
-        add(name, null, rpn, graphType,
-                Colors.resolveIndex(lastColor), legend,
                 DEFAULTCF, false, null, null, null);
         if(graphType.toPlot())
             lastColor++;
@@ -677,10 +615,6 @@ implements Cloneable, WithACL {
      */
     public void add(String name) {
         add(name, name, null, GraphType.NONE, null, null, DEFAULTCF, false, null, null, null);
-    }
-
-    public void add(String name, String rpn) {
-        add(name, null, rpn, GraphType.NONE, null, null, DEFAULTCF, false, null, null, null);
     }
 
     /**
@@ -752,16 +686,9 @@ implements Cloneable, WithACL {
                 dsName = name;
             }
         }
-        //If the name is missing, where do we find it ?
+        //If the name is missing, generate one ?
         else {
-            if(rpn != null)
-                name = Integer.toHexString(rpn.hashCode());
-            else if(legend != null) {
-                name = legend;
-            }
-            else if(host != null) {
-                name = host + "/" + probe + "/" + dsName;
-            }
+            name = Integer.toHexString((int)(Math.random() * Integer.MAX_VALUE));
         }
         //Auto generated legend
         if(legend == null && name != null && gt.legend())
@@ -937,7 +864,7 @@ implements Cloneable, WithACL {
         // The title line, only if values block is required
         if( withSummary) {
             graphDef.comment(""); //We simulate the color box
-            graphDef.comment(manySpace.substring(0, Math.min(maxLengthLegend, manySpace.length()) + 2));
+            graphDef.comment(MANYSPACE.substring(0, Math.min(maxLengthLegend, MANYSPACE.length()) + 2));
             graphDef.comment("Current");
             graphDef.comment("  Average");
             graphDef.comment("  Minimum");
@@ -1024,9 +951,9 @@ implements Cloneable, WithACL {
             return;
         if(gt == GraphType.PERCENTILELEGEND) {
             def.comment(legend + "\\g");
-            int missingLength = Math.min(maxLengthLegend - legend.length(), manySpace.length()) + 2;
+            int missingLength = Math.min(maxLengthLegend - legend.length(), MANYSPACE.length()) + 2;
             if(missingLength > 0)
-                def.comment(manySpace.substring(0, missingLength));
+                def.comment(MANYSPACE.substring(0, missingLength));
             def.gprint(ds, ConsolFun.MAX, "%6.2f%s");
             def.comment("\\l");
         }
@@ -1035,9 +962,9 @@ implements Cloneable, WithACL {
         }
         else if(gt != GraphType.NONE) {
             def.comment(legend + "\\g");
-            int missingLength = Math.min(maxLengthLegend - legend.length(), manySpace.length()) + 2;
+            int missingLength = Math.min(maxLengthLegend - legend.length(), MANYSPACE.length()) + 2;
             if(missingLength > 0)
-                def.comment(manySpace.substring(0, missingLength));
+                def.comment(MANYSPACE.substring(0, missingLength));
             def.gprint(ds, ConsolFun.LAST, "%6.2f%s");
             def.gprint(ds, ConsolFun.AVERAGE, "%8.2f%s");
             def.gprint(ds, ConsolFun.MIN, "%8.2f%s");
@@ -1148,7 +1075,7 @@ implements Cloneable, WithACL {
         return getTree(graph, PropertiesManager.HOSTSTAB);
     }
 
-    private LinkedList<String> getTree(GraphNode graph, String tabname) {
+    public LinkedList<String> getTree(GraphNode graph, String tabname) {
         List<?> elementsTree = trees.get(tabname);
         LinkedList<String> tree = new LinkedList<String>();
         if(elementsTree == null)
@@ -1169,22 +1096,8 @@ implements Cloneable, WithACL {
         logger.trace(jrds.Util.delayedFormatString("Adding tree %s to tab %s", tree, tab));
     }
 
-    public void addTree(String tab, Object[] tree) {        
-        addTree(tab, Arrays.asList(tree));
-    }
-
-    /**
-     * @param viewTree The viewTree to set.
-     */
-    public void setViewTree(List<?> viewTree) {
-        addTree(PropertiesManager.VIEWSTAB, viewTree);
-    }
-
-    /**
-     * @param hostTree The hostTree to set.
-     */
-    public void setHostTree(List<?> hostTree) {
-        addTree(PropertiesManager.HOSTSTAB, hostTree);
+    public void setTree(String tab, List<?> tree) {        
+        addTree(tab, tree);
     }
 
     /**
@@ -1235,7 +1148,7 @@ implements Cloneable, WithACL {
             }
         }
     }
-    
+
     public Integer getUnitExponent() {
         return unitExponent;
     }
@@ -1360,14 +1273,26 @@ implements Cloneable, WithACL {
         root.appendChild(document.createElement("name")).setTextContent(name);
         if(graphName != null)
             root.appendChild(document.createElement("graphName")).setTextContent(graphName);
+        if(graphClass != null) {
+            root.appendChild(document.createElement("graphClass")).setTextContent(graphClass.getCanonicalName());
+        }
         if(graphTitle != null)
             root.appendChild(document.createElement("graphTitle")).setTextContent(graphTitle);
         Element unit = document.createElement("unit");
         if(siUnit) {
             root.appendChild(unit).appendChild(document.createElement("SI"));
         }
-        if(unitExponent != null && unitExponent == -3) {
-            root.appendChild(unit).appendChild(document.createElement("base")).setTextContent("m");
+        if(unitExponent != null) {
+            for(SiPrefix unity: SiPrefix.values()) {
+                if(unitExponent == unity.getExponent()) {
+                    String suffix = unity.toString();
+                    if (unity == SiPrefix.FIXED) {
+                        suffix = "";
+                    }
+                    root.appendChild(unit).appendChild(document.createElement("base")).setTextContent(suffix);
+                    break;
+                }
+            }
         }
         if(verticalLabel != null)
             root.appendChild(document.createElement("verticalLabel")).setTextContent(verticalLabel);
@@ -1386,7 +1311,6 @@ implements Cloneable, WithACL {
                 i++;
                 continue;
             }
-            //System.out.println(allds.get(i+1).name);
             boolean reversed = false;
             if(i + 2 <= allds.size() && allds.get(i+1).name.startsWith("rev_")) {
                 reversed = true;
@@ -1410,23 +1334,14 @@ implements Cloneable, WithACL {
                 specElement.appendChild(document.createElement("legend")).setTextContent(e.legend);
             i++;
         }
-        List<?> hostTree = trees.get(PropertiesManager.HOSTSTAB);
-        if(hostTree != null) {
-            Element hostTreeElement =  (Element) root.appendChild(document.createElement("hosttree"));
-            for(Object o: hostTree) {
+        for(Map.Entry<String, List<?>> e: trees.entrySet()) {
+            Element hostTreeElement =  (Element) root.appendChild(document.createElement("tree"));
+            hostTreeElement.setAttribute("tab", e.getKey());
+            for(Object o: e.getValue()) {
                 Element pe = document.createElement("pathstring");
                 pe.setTextContent(o.toString());
                 hostTreeElement.appendChild(pe);
-            }
-        }
-        List<?> viewTree = trees.get(PropertiesManager.VIEWSTAB);
-        if(viewTree != null) {
-            Element viewTreeElement =  (Element) root.appendChild(document.createElement("viewtree"));
-            for(Object o: viewTree) {
-                Element pe = document.createElement("pathstring");
-                pe.setTextContent(o.toString());
-                viewTreeElement.appendChild(pe);
-            }
+            }            
         }
         return document;
     }

@@ -9,7 +9,7 @@ import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -190,7 +190,7 @@ public final class ArgFactory {
             Object argInstance = ArgFactory.ConstructFromString(setArgType, beanValue);
             setMethod.invoke(o, argInstance);       
         } catch (Exception e) {
-            throw new InvocationTargetException(e, "invalid bean name '" + beanName + "' for " + o);
+            throw new InvocationTargetException(e, "invalid bean '" + beanName + "' for " + o);
         }
     }
 
@@ -231,7 +231,7 @@ public final class ArgFactory {
      * @return
      */
     static public <T extends Annotation> Set<T> enumerateAnnotation(Class<?> searched, Class<T> annontationClass, Class<?> stop) {
-        Set<T> annotations =  new HashSet<T>();
+        Set<T> annotations =  new LinkedHashSet<T>();
         while(searched != null && stop.isAssignableFrom(searched)) {
             if(searched.isAnnotationPresent(annontationClass)) {
                 T annotation = searched.getAnnotation(annontationClass);

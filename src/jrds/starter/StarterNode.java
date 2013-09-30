@@ -1,8 +1,10 @@
 package jrds.starter;
 
 import java.lang.reflect.Method;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Set;
 
 import jrds.HostsList;
 import jrds.PropertiesManager;
@@ -94,7 +96,7 @@ public abstract class StarterNode implements StartersSet {
         if(! allStarters.containsKey(key)) {
             s.initialize(this);
             allStarters.put(key, s);
-            log(Level.DEBUG, "registering %s with key %s", s, key);
+            log(Level.DEBUG, "registering %s with key %s", s.getClass().getName(), key);
             return s;
         }
         else {
@@ -111,8 +113,19 @@ public abstract class StarterNode implements StartersSet {
         if(allStarters == null)
             return;
 
-        for(Starter s: allStarters.values()) {
-            s.configure(pm);
+        //A set with failed starters
+        Set<Object> failed = new HashSet<Object>();
+        for(Map.Entry<Object, Starter> me: allStarters.entrySet()) {
+            try {
+                me.getValue().configure(pm);
+            } catch (Exception e) {
+                failed.add(me.getKey());
+                log(Level.ERROR, e, "Starter %s failed to configure: %s", me.getValue(), e);
+            }
+        }
+        // Failed starter are removed
+        for(Object k: failed) {
+            allStarters.remove(k);
         }
     }
 
@@ -147,7 +160,8 @@ public abstract class StarterNode implements StartersSet {
     @SuppressWarnings("unchecked")
     public <StarterClass extends Starter> StarterClass find(Class<StarterClass> sc, Object key) {
         StarterClass s = null;
-        log(Level.TRACE, "Looking for starter %s with key %s in %s", sc, key, allStarters);
+        if(allStarters != null)
+            log(Level.TRACE, "Looking for starter %s with key %s in %s", sc, key, allStarters);
         if(allStarters != null && allStarters.containsKey(key)) {
             Starter stemp = allStarters.get(key);
             if(sc.isInstance(stemp)) {

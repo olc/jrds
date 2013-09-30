@@ -27,11 +27,12 @@ public class JSonTree extends JSonData {
 
     @Override
     public boolean generate(JrdsJSONWriter w, HostsList root, ParamsBean params) throws IOException, JSONException {
-        Filter f = params.getFilter();
-        GraphTree tree = params.getTree();
-        Tab tab = params.getTab();
-        if(tab != null) {
-            logger.debug(jrds.Util.delayedFormatString("Tab specified: %s", tab));
+
+        if(ParamsBean.TABCHOICE.equals(params.getChoiceType() ) ) {
+            Tab tab = params.getTab();
+            logger.debug(jrds.Util.delayedFormatString("Tab specified: %s", params.getChoiceValue()));
+            if(tab == null)
+                return false;
             if(tab.isFilters()){
                 Set<Filter> fset = tab.getFilters();
                 if(fset != null && fset.size() !=0) {
@@ -47,16 +48,33 @@ public class JSonTree extends JSonData {
                 }
             }
         }
-        else if(tree != null) {
-            logger.debug(jrds.Util.delayedFormatString("Tree specified: %s", tree));
+        else if(ParamsBean.HOSTCHOICE.equals(params.getChoiceType() ) ) {
+            GraphTree tree = params.getTree();
+            logger.debug(jrds.Util.delayedFormatString("Host specified: %s", params.getChoiceValue()));
+            if(tree == null)
+                return false;
             return evaluateTree(params, w, root, tree);
         }
-        else if( f != null) {
-            logger.debug(jrds.Util.delayedFormatString("Filter specified: %s", f));
-            return evaluateFilter(params, w, root, f);
+        else if(ParamsBean.TREECHOICE.equals(params.getChoiceType() ) ) {
+            GraphTree tree = params.getTree();
+            logger.debug(jrds.Util.delayedFormatString("Tree specified: %s", params.getChoiceValue()));
+            if(tree == null)
+                return false;
+            return evaluateTree(params, w, root, tree);
         }
-        logger.error("What to do ? No enough context");
-        return false;
+        else if(ParamsBean.FILTERCHOICE.equals(params.getChoiceType() ) ) {
+            Filter filter = params.getFilter();
+            logger.debug(jrds.Util.delayedFormatString("Filter specified: %s", params.getChoiceValue()));
+            if(filter == null)
+                return false;
+            return evaluateFilter(params, w, root, filter);
+        }
+        //Nothing requested, wrong query
+        else {
+            return false;
+        }
+        //No error, but nothing to do
+        return true;
     }
 
     private boolean evaluateTree(ParamsBean params, JrdsJSONWriter w, HostsList root, GraphTree trytree) throws IOException, JSONException {

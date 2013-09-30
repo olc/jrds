@@ -38,7 +38,7 @@ public class GraphNode implements Comparable<GraphNode>, WithACL {
 
     /**
      * A protected constructor
-     * child are allowed to build themselve in a strang way
+     * child are allowed to build themselves in a strange way
      * 
      */
     protected GraphNode() {
@@ -48,7 +48,7 @@ public class GraphNode implements Comparable<GraphNode>, WithACL {
      * @see java.lang.Object#hashCode()
      */
     public int hashCode() {
-        return getQualifieName().hashCode();
+        return getQualifiedName().hashCode();
     }
 
     /**
@@ -106,8 +106,12 @@ public class GraphNode implements Comparable<GraphNode>, WithACL {
      * Return a uniq name for the graph
      * @return
      */
-    public String getQualifieName() {
-        return probe.getHost().getName() + "/"  + getName();
+    public String getQualifiedName() {
+        if (probe.getHost() != null) {
+            return probe.getHost().getName() + "/"  + getName();
+        } else {
+            return "/"  + getName();
+        }
     }
 
     public GraphDesc getGraphDesc() {

@@ -17,11 +17,6 @@ public abstract class ProbeConnected<KeyType, ValueType, ConnectionClass extends
     }
 
     public Boolean configure() {
-        ConnectionClass cnx = getConnection();
-        if(cnx == null) {
-            log(Level.ERROR, "No connection configured with name %s", getConnectionName());
-            return false;
-        }
         return true;
     }
 
@@ -89,7 +84,7 @@ public abstract class ProbeConnected<KeyType, ValueType, ConnectionClass extends
         String cnxName = getConnectionName();
         Connection<?> cnx = find(Connection.class, cnxName);
         if(getNamedLogger().isTraceEnabled())
-            log(Level.TRACE, "Connection: %s", (cnx != null ? Boolean.toString(cnx.isStarted()) : "null") );
+            log(Level.TRACE, "Connection %s started: %s", cnxName, (cnx != null ? Boolean.toString(cnx.isStarted()) : "null") );
         if(cnx == null || ! cnx.isStarted())
             return false;
         return super.isCollectRunning();

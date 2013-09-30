@@ -80,12 +80,12 @@ public class TestUrlParser {
 
         p.addGraph(gn);
         hl.addProbe(p);
-        
+
         ParamsBean pb = new ParamsBean(GetMoke.getRequest(parameters, "DummyHost", "MockGraphInstance"), hl, "host", "graphname");
         Assert.assertEquals("Graph not found by path", new Integer(gn.hashCode()), pb.getId());        
         Assert.assertEquals("begin definition invalid", pb.getBegin(), begin.getTime());
         Assert.assertEquals("end definition invalid", pb.getEnd(), end.getTime());
-   }
+    }
 
     /**
      * Test that missing rest argument can be provided as cgi parameters
@@ -107,12 +107,12 @@ public class TestUrlParser {
 
         p.addGraph(gn);
         hl.addProbe(p);
-        
+
         ParamsBean pb = new ParamsBean(GetMoke.getRequest(parameters, "DummyHost"), hl, "host", "graphname");
         Assert.assertEquals("Graph not found by path", new Integer(gn.hashCode()), pb.getId());        
         Assert.assertEquals("begin definition invalid", pb.getBegin(), begin.getTime());
         Assert.assertEquals("end definition invalid", pb.getEnd(), end.getTime());
-   }
+    }
 
     @Test
     public void checkSortedTrue() {
@@ -157,8 +157,9 @@ public class TestUrlParser {
         Period p = pb.getPeriod();
 
         Date now = new Date();
-
-        Assert.assertTrue(p.getEnd().compareTo(now) >= 0);
+        long offset = Math.abs(now.getTime() - p.getEnd().getTime());
+        logger.debug("end offset:" + offset);
+        Assert.assertTrue(offset > 980 && offset < 1200);
         Assert.assertEquals(7, p.getScale());
         String url = pb.makeObjectUrl("root", "", false);
         logger.trace(url);
@@ -178,7 +179,8 @@ public class TestUrlParser {
         Date begin = calBegin.getTime();
 
         long delta = p.getBegin().getTime() - begin.getTime();
-        Assert.assertTrue(p.getEnd().compareTo(now) >= 0);
+        long offset = Math.abs(now.getTime() - p.getEnd().getTime());
+        Assert.assertTrue(offset > 980 && offset < 1200);
         Assert.assertTrue(delta < 10 && delta > -10);
         Assert.assertEquals(4, p.getScale());
         String url = pb.makeObjectUrl("root", "", false);

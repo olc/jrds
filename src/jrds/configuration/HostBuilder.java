@@ -26,9 +26,11 @@ import jrds.factories.ProbeFactory;
 import jrds.factories.xml.JrdsDocument;
 import jrds.factories.xml.JrdsElement;
 import jrds.factories.xml.JrdsNode;
+import jrds.probe.PassiveProbe;
 import jrds.starter.Connection;
 import jrds.starter.ConnectionInfo;
 import jrds.starter.HostStarter;
+import jrds.starter.Listener;
 import jrds.starter.Timer;
 
 import org.apache.log4j.Logger;
@@ -40,6 +42,7 @@ public class HostBuilder extends ConfigObjectBuilder<HostInfo> {
     private ProbeFactory pf;
     private Map<String, Macro> macrosMap;
     private Map<String, Timer> timers = Collections.emptyMap();
+    private Map<String, Listener<?, ?>> listeners = Collections.emptyMap();
 
     public HostBuilder() {
         super(ConfigType.HOSTS);
@@ -93,6 +96,8 @@ public class HostBuilder extends ConfigObjectBuilder<HostInfo> {
 
     private void parseFragment(JrdsElement fragment, HostInfo host, Map<String, Set<String>> collections, Map<String, String> properties) throws IllegalArgumentException, SecurityException, IllegalAccessException, InvocationTargetException, NoSuchMethodException {
 
+        // Find the connection for this host
+        // Will the registered latter, in the starter node, one for each timer
         for(ConnectionInfo cnx: makeConnexion(fragment, host)) {
             host.addConnection(cnx);
         }
@@ -176,6 +181,7 @@ public class HostBuilder extends ConfigObjectBuilder<HostInfo> {
                 logger.error("Invalid host configuration, collection " + name + " not found");
             }
         }
+
         for(JrdsElement probeNode: fragment.getChildElements()) {
             if(! "probe".equals(probeNode.getNodeName()) && ! "rrd".equals(probeNode.getNodeName()) )
                 continue;
@@ -210,7 +216,7 @@ public class HostBuilder extends ConfigObjectBuilder<HostInfo> {
         }
         if(p == null)
             return null;
-        
+
         p.readProperties(pm);
 
         String timerName = probeNode.getAttribute("timer");
@@ -222,7 +228,7 @@ public class HostBuilder extends ConfigObjectBuilder<HostInfo> {
             return null;
         }
         else {
-            logger.trace(Util.delayedFormatString("probe %s/%s added to timer %s", host, type, timer));
+            logger.trace(Util.delayedFormatString("probe %s/%s will use timer %s", host, type, timer));
         }
         p.setStep(timer.getStep());
         p.setTimeout(timer.getTimeout());
@@ -237,28 +243,6 @@ public class HostBuilder extends ConfigObjectBuilder<HostInfo> {
         //The host is set
         HostStarter shost = timer.getHost(host);
         p.setHost(shost);
-
-        //A connected probe, register the needed connection
-        //It can be defined within the node, referenced by it's name, or it's implied name
-        if(p instanceof ConnectedProbe) {
-            String connectionName = null;
-            ConnectedProbe cp = (ConnectedProbe) p;
-            for(ConnectionInfo ci: makeConnexion(probeNode, host)) {
-                ci.register(p);
-            }
-            String connexionName = probeNode.getAttribute("connection");
-            if(connexionName != null && ! "".equals(connexionName)) {
-                logger.trace(Util.delayedFormatString("Adding connection %s to %s", connexionName, p));
-                connectionName = jrds.Util.parseTemplate(connexionName, host);
-                cp.setConnectionName(connectionName);
-            }
-            else {
-                connectionName = cp.getConnectionName();
-            }
-            ConnectionInfo ci = host.getConnection(connectionName);
-            if(ci != null && p.find(connectionName) == null)
-                ci.register(shost);
-        }
 
         ProbeDesc pd = p.getPd();
         List<Object> args = ArgFactory.makeArgs(probeNode, host, properties);
@@ -299,15 +283,61 @@ public class HostBuilder extends ConfigObjectBuilder<HostInfo> {
             logger.error(p + " configuration failed");
             return null;
         }
-        if(p != null && p.checkStore()) {
+
+        //A connected probe, register the needed connection
+        //It can be defined within the node, referenced by it's name, or it's implied name
+        if(p instanceof ConnectedProbe) {
+            String connectionName = null;
+            ConnectedProbe cp = (ConnectedProbe) p;
+            //Register the connections defined within the probe
+            for(ConnectionInfo ci: makeConnexion(probeNode, p)) {
+                ci.register(p);
+            }
+            String connexionName = probeNode.getAttribute("connection");
+            if(connexionName != null && ! "".equals(connexionName)) {
+                logger.trace(Util.delayedFormatString("Adding connection %s to %s", connexionName, p));
+                connectionName = jrds.Util.parseTemplate(connexionName, host);
+                cp.setConnectionName(connectionName);
+            }
+            else {
+                connectionName = cp.getConnectionName();
+            }
+            //If the connection is not already registred, try looking for it
+            //And register it with the host
+            if(p.find(connectionName) == null) {
+                if(logger.isTraceEnabled())
+                    logger.trace(Util.delayedFormatString("Looking for connection %s in %s", connectionName, host.getConnections()));
+                ConnectionInfo ci = host.getConnection(connectionName);
+                if(ci != null)
+                    ci.register(shost);
+                else {
+                    logger.error(Util.delayedFormatString("Failed to find a connection %s for a probe %s", connectionName, cp));
+                    return null;
+                }
+            }
+        }
+
+        //A passive probe, perhaps a specific listener is defined
+        if(p instanceof PassiveProbe) {
+            PassiveProbe<?> pp = (PassiveProbe<?>) p;
+            String listenerName = probeNode.getAttribute("listener");
+            if(listenerName != null && ! listenerName.trim().isEmpty()) {
+                Listener<?, ?> l = listeners.get(listenerName);
+                if(l != null) {
+                    pp.setListener(l);
+                }
+                else {
+                    logger.error(Util.delayedFormatString("Listener name not found for %s: %s", pp, listenerName));
+                }
+            }
+        }
+
+        if(p.checkStore()) {
             shost.addProbe(p);
         }
         else {
             return null;
         }
-
-        for(ConnectionInfo cnx: makeConnexion(probeNode, host))
-            cnx.register(p);
 
         return p;
     }
@@ -323,7 +353,7 @@ public class HostBuilder extends ConfigObjectBuilder<HostInfo> {
         try {
             JrdsElement snmpNode = node.getElementbyName("snmp");
             if(snmpNode != null) {
-                logger.trace("found a snmp starter");
+                logger.info("found an old snmp starter, please update to a connection");
                 String connectionClassName = "jrds.snmp.SnmpConnection";
                 Class<? extends Connection<?>> connectionClass = (Class<? extends Connection<?>>) pm.extensionClassLoader.loadClass(connectionClassName);
 
@@ -339,10 +369,16 @@ public class HostBuilder extends ConfigObjectBuilder<HostInfo> {
         return null;
     }
 
-    Set<ConnectionInfo> makeConnexion(JrdsElement domNode, HostInfo host) {
+    /**
+     * Enumerate the connections found in an XML node
+     * @param domNode a node to parse
+     * @param host
+     * @return
+     */
+    Set<ConnectionInfo> makeConnexion(JrdsElement domNode, Object parent) {
         Set<ConnectionInfo> connectionSet = new HashSet<ConnectionInfo>();
 
-        //For a connect probe, the connection can be defined within the probe
+        //Check for the old SNMP connection node
         ConnectionInfo cnxSnmp = parseSnmp(domNode);
         if(cnxSnmp != null)
             connectionSet.add(cnxSnmp);
@@ -354,8 +390,6 @@ public class HostBuilder extends ConfigObjectBuilder<HostInfo> {
                 continue;
             }
             String name = cnxNode.getAttribute("name");
-            if(name == null)
-                name = type;
 
             try {
                 //Load the class for the connection
@@ -369,11 +403,12 @@ public class HostBuilder extends ConfigObjectBuilder<HostInfo> {
                 Map<String, String> attrs = new HashMap<String, String>();
                 for(JrdsElement attrNode: cnxNode.getChildElementsByName("attr")) {
                     String attrName = attrNode.getAttribute("name");
-                    String textValue = Util.parseTemplate(attrNode.getTextContent(), host);
+                    String textValue = Util.parseTemplate(attrNode.getTextContent(), parent);
                     attrs.put(attrName, textValue);
                 }
                 ConnectionInfo cnx = new ConnectionInfo(connectionClass, name, args, attrs);
                 connectionSet.add(cnx);
+                logger.debug(Util.delayedFormatString("Added connection %s to node %s", cnx, parent));
             }
             catch (NoClassDefFoundError ex) {
                 logger.warn("Connection class not found: " + type+ ": " + ex);
@@ -470,6 +505,10 @@ public class HostBuilder extends ConfigObjectBuilder<HostInfo> {
      */
     public void setTimers(Map<String, Timer> timers) {
         this.timers = timers;
+    }
+
+    public void setListeners(Map<String, Listener<?, ?>> listenerMap) {
+        listeners = listenerMap;
     }
 
 }

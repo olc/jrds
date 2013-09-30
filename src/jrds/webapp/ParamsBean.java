@@ -1,9 +1,3 @@
-/*##########################################################################
- _##
- _##  $Id: Period.java 217 2006-02-16 01:06:45 +0100 (jeu., 16 févr. 2006) fbacchella $
- _##
- _##########################################################################*/
-
 package jrds.webapp;
 
 import java.awt.Graphics2D;
@@ -31,6 +25,7 @@ import java.util.zip.GZIPInputStream;
 import javax.servlet.http.HttpServletRequest;
 
 import jrds.Base64;
+import jrds.Configuration;
 import jrds.Filter;
 import jrds.Graph;
 import jrds.GraphDesc;
@@ -47,14 +42,18 @@ import org.apache.log4j.Logger;
 import org.json.JSONException;
 
 /**
- * A bean to have a period with begin and end of type String
+ * A bean to parse the request paramaters
  *
  * @author Fabrice Bacchella
- * @version $Revision: 217 $ $Date$
  */
 public class ParamsBean implements Serializable {
 
     static final private Logger logger = Logger.getLogger(ParamsBean.class);
+
+    static public final String TREECHOICE = "tree";    
+    static public final String TABCHOICE = "tab";
+    static public final String FILTERCHOICE = "filter";
+    static public final String HOSTCHOICE = "host";
 
     private static final ThreadLocal<DateFormat> df = 
             new ThreadLocal<DateFormat> () {
@@ -76,7 +75,7 @@ public class ParamsBean implements Serializable {
     boolean history = false;
     String maxArg = null;
     String minArg = null;
-    Filter f = null;
+    Filter filter = null;
     private HostsList hostlist;
     String user = null;
     Set<String> roles = Collections.emptySet();
@@ -155,7 +154,7 @@ public class ParamsBean implements Serializable {
                     roles.add(role);
             }
         }
-        logger.trace("Found user "  + user + " with roles " + roles);		
+        logger.trace(Util.delayedFormatString("Found user %s with roles %s", user, roles));		
     }
 
     private void unpack(String packed) {
@@ -184,8 +183,7 @@ public class ParamsBean implements Serializable {
         } catch (JSONException e) {
             logger.error("JSON parsing exception " + e);
         }
-        if(logger.isTraceEnabled())
-            logger.trace("Params unpacked: " + params);
+        logger.trace(jrds.Util.delayedFormatString("Params unpacked: %s", params));
     }
 
     private void parseReq(HostsList hl) {
@@ -240,40 +238,31 @@ public class ParamsBean implements Serializable {
         String treeName = getValue("tree");
         String tabName = getValue("tab");
         if(paramFilterName != null && ! "".equals(paramFilterName)) {
-            f = hostlist.getFilter(paramFilterName);
-            if(f != null) {
-                choiceType = "filter";
-                choiceValue = paramFilterName;
-            }
+            filter = hostlist.getFilter(paramFilterName);
+            choiceType = FILTERCHOICE;
+            choiceValue = paramFilterName;
         }
         else if(paramHostFilter != null && ! "".equals(paramHostFilter)) {
             tree = hl.getGraphTreeByHost().getByPath(GraphTree.HOSTROOT, paramHostFilter);
-            if(tree != null) {
-                choiceType = "host";
-                choiceValue = paramHostFilter;
-            }
-            //f = new jrds.FilterHost(paramHostFilter);
+            choiceType = HOSTCHOICE;
+            choiceValue = paramHostFilter;
         }
         else if(treeName != null && ! "".equals(treeName)) {
             tree = hl.getGraphTree(treeName);
-            if(tree != null) {
-                choiceType = "tree";
-                choiceValue = treeName;
-            }
+            choiceType = TREECHOICE;
+            choiceValue = treeName;
         }
         else if(tabName != null && ! "".equals(tabName)) {
             tab = hl.getTab(tabName);
-            if(tab != null) {
-                choiceType = "tab";
-                choiceValue = tabName;
-            }
+            choiceType = TABCHOICE;
+            choiceValue = tabName;
         }
 
         //If previous steps failed
         if(choiceType == null || choiceValue == null) {
-            choiceValue = hostlist.getFirstTab();
             tab = hl.getTab(choiceValue);
-            choiceType = "tab";
+            choiceValue = hostlist.getFirstTab();
+            choiceType = TABCHOICE;
         }
     }
 
@@ -301,7 +290,7 @@ public class ParamsBean implements Serializable {
     }
 
     public Filter getFilter() {
-        return f;
+        return filter;
     }
 
     public void configureGraph(jrds.Graph g) {
@@ -357,7 +346,7 @@ public class ParamsBean implements Serializable {
             gd.initializeLimits(g2d);
 
             gn = new GraphNode(p, gd);
-            gn.addACL(caller.getConfig().getPropertiesManager().defaultACL);
+            gn.addACL(Configuration.get().getPropertiesManager().defaultACL);
         }
         return gn;
     }
@@ -411,11 +400,11 @@ public class ParamsBean implements Serializable {
     }
 
     private void addFilterArgs(Map<String, Object> args) {
-        if(f instanceof jrds.FilterHost) {
-            args.put("host", f.getName());
+        if(filter instanceof jrds.FilterHost) {
+            args.put("host", filter.getName());
         }
-        else if (f instanceof jrds.Filter){
-            args.put("filter", f.getName());
+        else if (filter instanceof jrds.Filter){
+            args.put("filter", filter.getName());
 
         }
     }
@@ -519,12 +508,14 @@ public class ParamsBean implements Serializable {
 
         return parambuff.toString();
     }
+
     /**
      * @return the id
      */
     public Integer getId() {
         return id;
     }
+
     /**
      * @param id the id to set
      */
@@ -540,7 +531,7 @@ public class ParamsBean implements Serializable {
             if(scaleStr == null)
                 scaleStr = getValue("autoperiod");
 
-            int scale = jrds.Util.parseStringNumber(scaleStr, -1).intValue();
+            int scale = jrds.Util.parseStringNumber(scaleStr, -1);
 
             String end = getValue("end");
             String begin = getValue("begin");
@@ -550,6 +541,10 @@ public class ParamsBean implements Serializable {
                 p = new Period(begin, end);
             else
                 p = new Period();
+            if(params.containsKey("periodnext"))
+                p = p.next();
+            else if(params.containsKey("periodprevious"))
+                p = p.previous();
         } catch (NumberFormatException e) {
             logger.error("Period cannot be parsed");
         } catch (ParseException e) {
@@ -699,4 +694,5 @@ public class ParamsBean implements Serializable {
     public Tab getTab() {
         return tab;
     }
+
 }

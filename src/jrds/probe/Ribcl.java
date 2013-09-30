@@ -8,7 +8,6 @@ import java.net.Socket;
 import java.net.UnknownHostException;
 import java.security.KeyManagementException;
 import java.security.NoSuchAlgorithmException;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -22,14 +21,17 @@ import javax.xml.transform.TransformerException;
 import jrds.Probe;
 import jrds.Util;
 import jrds.factories.ProbeBean;
+import jrds.factories.ProbeMeta;
 import jrds.starter.SocketFactory;
-import jrds.starter.StarterNode;
 import jrds.starter.XmlProvider;
 
 import org.apache.log4j.Level;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 
+@ProbeMeta(
+        topStarter=jrds.starter.XmlProvider.class
+        )
 @ProbeBean({"user", "password", "iloHost"})
 public class Ribcl extends Probe<String, Number> {
 	private String user;
@@ -55,15 +57,6 @@ public class Ribcl extends Probe<String, Number> {
 		this.passwd = passwd;
 	}
 
-    /* (non-Javadoc)
-     * @see jrds.starter.StarterNode#setParent(jrds.starter.StarterNode)
-     */
-    @Override
-    public void setParent(StarterNode parent) {
-        super.setParent(parent);
-        registerStarter(new XmlProvider());
-    }
-
 	@Override
 	public Map<String, Number> getNewSampleValues() {
 		Map<String, Number> vars = new HashMap<String, Number>();
@@ -72,18 +65,18 @@ public class Ribcl extends Probe<String, Number> {
 			s = connect();
 		} catch (Exception e) {
 			log(Level.ERROR, e, "SSL connect error %s", e);
-			return java.util.Collections.emptyMap();
+			return null;
 		}
 
 		try {
 			XmlProvider xmlstarter  = find(XmlProvider.class);
 			if(xmlstarter == null) {
 				log(Level.ERROR, "XML Provider not found");
-				return Collections.emptyMap();
+				return null;
 			}
 			
 			if(! isCollectRunning())
-				return java.util.Collections.emptyMap();
+				return null;
 
 			OutputStream outputSocket = s.getOutputStream();
 			InputStream inputSocket = s.getInputStream();

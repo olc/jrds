@@ -9,6 +9,7 @@ import javax.servlet.http.HttpServletResponse;
 
 import jrds.HostsList;
 import jrds.Tab;
+import jrds.Util;
 
 import org.apache.log4j.Logger;
 import org.json.JSONArray;
@@ -47,15 +48,9 @@ public class JSonQueryParams extends JrdsServlet {
             doVariable(w, "min", params.getMinStr());
             doVariable(w, "max", params.getMaxStr());
             doVariable(w, "dsName", params.getValue("dsName"));
-            int scale = params.getScale();
-            if(scale > 0) {
-                doVariable(w, "autoperiod", "" + scale);
-            }
-            else {
-                doVariable(w, "begin", params.getStringBegin());
-                doVariable(w, "end", params.getStringEnd());
-                doVariable(w, "autoperiod", "0");
-            }
+            doVariable(w, "begin", params.getBegin());
+            doVariable(w, "end", params.getEnd());
+            doVariable(w, "autoperiod", params.getScale());
 
             //Add the list of tabs
             w.key("tabslist");
@@ -81,6 +76,7 @@ public class JSonQueryParams extends JrdsServlet {
     }
 
     private final void doVariable(JrdsJSONWriter w, String key, Object value) throws JSONException {
+        logger.trace(Util.delayedFormatString("resolving %s with %s", key, value));
         if(value == null) 
             return;
         if(value instanceof String && "".equals(value.toString().trim())) {
