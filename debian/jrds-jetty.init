@@ -15,10 +15,10 @@
 PATH=/bin:/usr/bin:/sbin:/usr/sbin
 
 DESC="JRDS Performance Collector Server for Jetty"
-NAME=jrds
+NAME=jrds-jetty
 SCRIPTNAME=/etc/init.d/$NAME
-PIDFILE=/var/run/$NAME/jrds.pid
-JRDS_USER=$NAME
+PIDFILE=/var/run/jrds/jrds.pid
+JRDS_USER=jrds
 JRDS_JAR=/usr/share/jrds/web/WEB-INF/lib/boot.jar
 HTTP_PORT=8080
 JAVA=java
@@ -80,7 +80,7 @@ do_start()
 # 
 get_running() 
 {
-    return `ps -U $JRDS_USER --no-headers -f | egrep -e '(java|daemon)' | grep 'name=jrds ' | grep -c . `
+    return `ps -U $JRDS_USER --no-headers -f | egrep -e '(java|daemon)' | grep 'name=jrds-jetty' | grep -c . `
 }
 
 force_stop() 
