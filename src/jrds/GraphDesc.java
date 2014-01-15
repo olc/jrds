@@ -44,7 +44,7 @@ implements Cloneable, WithACL {
 
     static public final ConsolFun DEFAULTCF = ConsolFun.AVERAGE;
 
-    //  static final private String manySpace = "123456798ABCDEF0123465798ABCDEF0123456798ABCDEF0123465798ABCDEF0123456798ABCDEF0123465798ABCDEF0";
+    //  static final private String manySpace = "123456798ABCDEF0123465798ABCDEF0123456798ABCDEF0123465798ABCDEF0123456798ABCDEF0123465798ABCDEF0  ";
     static final private String MANYSPACE = "                                                                      ";
 
     public enum GraphType {
@@ -513,7 +513,7 @@ implements Cloneable, WithACL {
             this.color = color;
             this.legend = legend;
             this.cf = cf;
-            if(host != null && probe != null) {
+            if(probe != null) {
                 this.dspath = new DsPath(host, probe);
             }
             else {
@@ -557,7 +557,19 @@ implements Cloneable, WithACL {
             this.dspath = null;
         }
         public String toString() {
-            return "DsDesc(" + name + "," + dsName + ",\"" + (rpn == null ? "" : rpn) + "\"," + graphType + "," + color + ",\"" + (legend == null ? "" : legend) + "\"," + cf + ")";
+            return String.format("DsDesc(%s,[%s/%s/%s],\"%s\",%s,Color[%d, %d, %d],\"%s\",%s)",
+                    name,
+                    (dspath == null ? "" : dspath.host),
+                    (dspath == null ? "" : dspath.probe),
+                    dsName,
+                    (rpn == null ? "" : rpn),
+                    graphType,
+                    (color != null ? color.getRed() : 0),
+                    (color != null ? color.getGreen() : 0),
+                    (color != null ? color.getBlue() : 0),
+                    (legend == null ? "" : legend),
+                    cf
+                    );
         }
     }
 
@@ -830,11 +842,16 @@ implements Cloneable, WithACL {
             else {
                 Probe<?,?> probe = defProbe;
                 if(ds.dspath != null) {
+                    // If the host is not defined, use the current host
+                    String pathHost = ds.dspath.host;
+                    if(pathHost == null) {
+                        pathHost = defProbe.getHost().getName();
+                    }
                     if(logger.isTraceEnabled())
-                        logger.trace("External probe path: " + ds.dspath.host + "/" + ds.dspath.probe + "/" + ds.dsName);
-                    probe = hl.getProbeByPath(ds.dspath.host, ds.dspath.probe);
+                        logger.trace("External probe path: " + pathHost + "/" + ds.dspath.probe + "/" + ds.dsName);
+                    probe = hl.getProbeByPath(pathHost, ds.dspath.probe);
                     if(probe == null) {
-                        logger.error("Invalide probe: " + ds.dspath.host + "/" + ds.dspath.probe);
+                        logger.error("Invalide probe: " + pathHost + "/" + ds.dspath.probe);
                         continue;
                     }
                 }
@@ -864,7 +881,7 @@ implements Cloneable, WithACL {
         // The title line, only if values block is required
         if( withSummary) {
             graphDef.comment(""); //We simulate the color box
-            graphDef.comment(MANYSPACE.substring(0, Math.min(maxLengthLegend, MANYSPACE.length()) + 2));
+            graphDef.comment(MANYSPACE.substring(0, Math.min(maxLengthLegend, MANYSPACE.length() - 2) + 2));
             graphDef.comment("Current");
             graphDef.comment("  Average");
             graphDef.comment("  Minimum");
@@ -909,18 +926,18 @@ implements Cloneable, WithACL {
      * @throws IOException
      * @throws RrdException
      */
-    public DataProcessor getPlottedDatas(Probe<?,?> probe, Map<?, ?> ownData, long start, long end) throws IOException {
+    public DataProcessor getPlottedDatas(Probe<?,?> probe, Map<String, Plottable> ownData, long start, long end) throws IOException {
         DataProcessor retValue = new DataProcessor(start, end);
         String rrdName = probe.getRrdName();
 
         String lastName = null;
-        for(DsDesc ds: allds) {
+        for(DsDesc ds: allds) {            
             boolean stack = ds.graphType == GraphType.STACK;
             boolean plotted = stack || ds.graphType == GraphType.LINE  || ds.graphType == GraphType.AREA;
             if (ds.rpn == null && ds.dsName != null) {
                 //Does the datas existe in the provided values
-                if(ownData != null && ownData.containsKey(ds.dsName) && ds.graphType == GraphType.LINE) {
-                    retValue.addDatasource(ds.name, (Plottable) ownData.get(ds.dsName));
+                if(ownData != null && ownData.containsKey(ds.dsName)) {
+                    retValue.addDatasource(ds.name, ownData.get(ds.dsName));
                 }
                 //Or they might be on the associated rrd
                 else if(probe.dsExist(ds.dsName)) {
@@ -1260,6 +1277,14 @@ implements Cloneable, WithACL {
     @Override
     public Object clone() throws CloneNotSupportedException {
         GraphDesc newgd =  (GraphDesc) super.clone();
+        newgd.allds = new ArrayList<DsDesc>(allds.size());
+        newgd.allds.addAll(allds);
+        newgd.trees = new HashMap<String, List<?>>(trees.size());
+        for(Map.Entry<String, List<?>> e: trees.entrySet()) {
+            List<Object> tree = new ArrayList<Object>(e.getValue().size());
+            tree.addAll(e.getValue());
+            newgd.trees.put(e.getKey(), tree);
+        }
         return newgd;
     }
 
