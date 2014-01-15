@@ -1,7 +1,7 @@
 # defaults for jrds performance collector
 
 # pulled in from the init script; makes things easier.
-NAME=jrds
+# NAME=jrds-jetty
 
 # location of java
 # JAVA=/usr/bin/java
