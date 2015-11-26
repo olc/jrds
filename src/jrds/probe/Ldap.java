@@ -86,8 +86,7 @@ public class Ldap extends ProbeConnected<String, Number, LdapConnection> {
         Map<String, Object> retValues = doMultiSearch(cnx, requestInfo);
         log(Level.TRACE, "will search uptime in %s", retValues);
         if(retValues.containsKey("upTimePath")) {
-            long uptime = jrds.Util.parseStringNumber(retValues.get("upTimePath").toString(), -1L);
-            return uptime;
+            return jrds.Util.parseStringNumber(retValues.get("upTimePath").toString(), -1L);
         }
         else {
             Object startTimePath = retValues.get(getPd().getSpecific("startTimePath"));
@@ -102,8 +101,7 @@ public class Ldap extends ProbeConnected<String, Number, LdapConnection> {
                         current = df.parse(currentTimePath.toString());
                     else
                         current = new Date();
-                    long uptime = ( current.getTime() - start.getTime()) / 1000;
-                    return uptime;
+                    return ( current.getTime() - start.getTime()) / 1000;
                 } catch (ParseException e) {
                     log(Level.ERROR,"Date not parsed with pattern " + ((SimpleDateFormat) df).toPattern() + ": " + e);
                 }
@@ -155,7 +153,7 @@ public class Ldap extends ProbeConnected<String, Number, LdapConnection> {
 
     protected Map<String, Object>doSearchFielsEntry(LdapConnection cnx, String base, Set<String> fields) {
         SearchControls sc = new SearchControls();
-        String[] attributeFilter = fields.toArray(new String[]{});
+        String[] attributeFilter = fields.toArray(new String[fields.size()]);
         sc.setReturningAttributes(attributeFilter);
         sc.setSearchScope(SearchControls.OBJECT_SCOPE);
         sc.setReturningObjFlag(false);
@@ -164,7 +162,7 @@ public class Ldap extends ProbeConnected<String, Number, LdapConnection> {
 
         Map<String, Object> retValues = new HashMap<String, Object>();
         try {
-            Attributes attributesList = dctx.getAttributes(base, fields.toArray(new String[0]));
+            Attributes attributesList = dctx.getAttributes(base, fields.toArray(new String[fields.size()]));
             for(Attribute a: jrds.Util.iterate(attributesList.getAll())) {
                 log(Level.TRACE, "collect name: %s?%s", base, a.getID());
                 retValues.put(a.getID(), a.get());

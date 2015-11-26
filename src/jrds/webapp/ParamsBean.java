@@ -5,6 +5,7 @@ import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.Serializable;
 import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
@@ -24,7 +25,6 @@ import java.util.zip.GZIPInputStream;
 
 import javax.servlet.http.HttpServletRequest;
 
-import jrds.Base64;
 import jrds.Configuration;
 import jrds.Filter;
 import jrds.Graph;
@@ -37,6 +37,7 @@ import jrds.Probe;
 import jrds.Tab;
 import jrds.Util;
 import jrds.Util.SiPrefix;
+import net.iharder.Base64;
 
 import org.apache.log4j.Logger;
 import org.json.JSONException;
@@ -64,6 +65,9 @@ public class ParamsBean implements Serializable {
     };
 
     static private final Pattern rangePattern = Pattern.compile("(-?\\d+(.\\d+)?)([a-zA-Z]{0,2})");
+    //static private final Pattern splitPattern = Pattern.compile("/((.+)(/[^/].*+)/?)|/(.*)");
+    //static private final Pattern splitPattern = Pattern.compile("/([^/]*)(?=/[^/])");
+    static private final Pattern splitPattern = Pattern.compile("/([^/].*[^/]|[^/])/([^/].*[^/]|[^/])/([^/].*[^/]|[^/])");
 
     String contextPath = "";
     String dsName = null;
@@ -100,6 +104,20 @@ public class ParamsBean implements Serializable {
         contextPath = req.getContextPath();
         String probeInfo = req.getPathInfo();
         if (probeInfo != null) {
+            Matcher m = splitPattern.matcher(probeInfo.trim());
+            while(m.find()) {
+                StringBuilder sb = new StringBuilder();
+                for(int i=0 ; i <= m.groupCount(); i++) {
+                    sb.append(m.group(i));
+                    sb.append(" ");
+                }
+                logger.trace(sb);
+                String next = m.group(2);
+                if(next != null)
+                    m = splitPattern.matcher(next);
+                else
+                    break;
+            }
             params = new HashMap<String, String[]>(restPath.length);
             String[] path = probeInfo.trim().split("/");
             logger.trace(jrds.Util.delayedFormatString("mapping %s to %s", Arrays.asList(path), Arrays.asList(restPath)));
@@ -162,8 +180,9 @@ public class ParamsBean implements Serializable {
         formatedpack = JSonPack.GZIPHEADER +  packed.replace('!', '=').replace('$', '/').replace('*', '+');
         logger.trace(formatedpack);
         ByteArrayOutputStream outbuffer = new ByteArrayOutputStream(formatedpack.length());
-        ByteArrayInputStream inbuffer = new ByteArrayInputStream(Base64.decode(formatedpack));
-        try {
+        try {            
+            InputStream inbuffer = new Base64.InputStream( new ByteArrayInputStream(formatedpack.getBytes()), Base64.DECODE );
+
             byte[] copybuffer = new byte[1500];
             GZIPInputStream os = new GZIPInputStream(inbuffer);
             int realread = os.read(copybuffer);
@@ -171,6 +190,8 @@ public class ParamsBean implements Serializable {
                 outbuffer.write(copybuffer, 0, realread );
                 realread = os.read(copybuffer);
             }
+            os.close();
+
             JrdsJSONObject json = new JrdsJSONObject(outbuffer.toString());
             for(String key: json) {
                 Object value = json.get(key);
@@ -460,13 +481,13 @@ public class ParamsBean implements Serializable {
         urlBuffer.append(contextPath);
 
         if(! contextPath.endsWith("/")) {
-            urlBuffer.append("/");
+            urlBuffer.append('/');
         }
-        urlBuffer.append(file + "?");
+        urlBuffer.append(file).append("?");
 
         for(Map.Entry<String, Object>e: args.entrySet()) {
             try {
-                urlBuffer.append(e.getKey() + "="+ URLEncoder.encode(e.getValue().toString(), "UTF-8") + "&");
+                urlBuffer.append(e.getKey()).append("=").append(URLEncoder.encode(e.getValue().toString(), "UTF-8")).append("&");
             } catch (UnsupportedEncodingException e1) {
             }
         }
@@ -485,15 +506,15 @@ public class ParamsBean implements Serializable {
 
         parambuff.append('&');
         if(id != 0)
-            parambuff.append("id=" + id + '&');
+            parambuff.append("id=").append(id).append('&');
         if(gid != 0)
-            parambuff.append("gid=" + gid + '&');
+            parambuff.append("gid=").append(gid).append('&');
         for(Map.Entry<String, Object> param: args.entrySet()) {
             String key = param.getKey();
             Object value = param.getValue();
             if(value != null && ! "".equals(value)) {
                 parambuff.append(key);
-                parambuff.append("=");
+                parambuff.append('=');
                 parambuff.append(value);
                 parambuff.append('&');
             }
@@ -626,7 +647,7 @@ public class ParamsBean implements Serializable {
     public String getPeriodUrl() {
         StringBuilder parambuff = new StringBuilder();
         if(period != null)
-            parambuff.append("begin=" + period.getBegin().getTime() + "&end=" + period.getEnd().getTime());
+            parambuff.append("begin=").append(period.getBegin().getTime()).append("&end=").append(period.getEnd().getTime());
         return parambuff.toString();
     }
 

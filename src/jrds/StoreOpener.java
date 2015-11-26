@@ -9,7 +9,7 @@ import org.apache.log4j.Logger;
 import org.rrd4j.core.RrdBackendFactory;
 import org.rrd4j.core.RrdDb;
 import org.rrd4j.core.RrdDbPool;
-import org.rrd4j.core.RrdRandomAccessFileBackendFactory;
+import org.rrd4j.core.RrdFileBackendFactory;
 
 /**
  * A wrapper classe, to manage the rrdDb operations
@@ -31,7 +31,6 @@ public final class StoreOpener {
      * @param rrdFile Name of the RRD datasource.
      * @return RrdDb instance of the datasource.
      * @throws IOException Thrown in case of I/O error.
-     * @throws InterruptedException 
      */
     public final static RrdDb getRrd(String rrdFile)
             throws IOException {
@@ -77,6 +76,7 @@ public final class StoreOpener {
             StoreOpener.backend = RrdBackendFactory.getDefaultFactory();
 
         logger.debug(Util.delayedFormatString("Store backend used is %s",  StoreOpener.backend.getName()));
+        logger.debug(Util.delayedFormatString("use pool: %b",  usepool));
     }
 
     public static final void prepare(String backend, int dbPoolSize) {
@@ -93,7 +93,7 @@ public final class StoreOpener {
         }
         StoreOpener.backend = RrdBackendFactory.getDefaultFactory();
 
-        if(RrdRandomAccessFileBackendFactory.class.isAssignableFrom(StoreOpener.backend.getClass())) {
+        if(StoreOpener.backend instanceof RrdFileBackendFactory && dbPoolSize != 0) {
             try {
                 instance = RrdDbPool.getInstance();
                 instance.setCapacity(dbPoolSize);
@@ -101,7 +101,8 @@ public final class StoreOpener {
             } catch (Exception e) {
             }
         }
-        logger.debug(Util.delayedFormatString("Store backend used is %s",  StoreOpener.backend));
+        logger.debug(Util.delayedFormatString("Store backend used is %s",  StoreOpener.backend.getName()));
+        logger.debug(Util.delayedFormatString("use pool: %b %d",  usepool, dbPoolSize));
     }
 
     public static final void stop() {

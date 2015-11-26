@@ -13,35 +13,43 @@ public class HostStarter extends StarterNode {
     private HostInfo host;
     private final Set<Probe<?,?>> allProbes = new TreeSet<Probe<?,?>>();
 
+    private String runningname;
+
     public HostStarter(HostInfo host) {
         super();
         this.host = host;
+        this.runningname = host.getName() + ":notrunning";
         registerStarter(new Resolver(host.getDnsName()));
     }
-    
+
     public void addProbe(Probe<?,?> p){
         host.addProbe(p);
         allProbes.add(p);
     }
-    
+
     public Iterable<Probe<?,?>> getAllProbes() {
         return allProbes;
     }
-    
+
     public void collectAll() {
         log(Level.DEBUG, "Starting collect");
+        Timer timer = (Timer) getParent();
         long start = System.currentTimeMillis();
         startCollect();
+        String oldThreadName = Thread.currentThread().getName();
         for(Probe<?,?> probe: allProbes) {
             if(! isCollectRunning() )
                 break;
             long duration = (System.currentTimeMillis() - start) / 1000 ;
             if(duration > (probe.getStep() / 2 )) {
-                log(Level.ERROR, "Collect too slow: %ds", duration);
+                log(Level.ERROR, "Collect too slow: %ds for timer %s", duration, timer);
                 break;
             }
             log(Level.TRACE, "Starting collect for %s", probe);
+            log(Level.DEBUG, "Collect all stats for host " + host.getName());
+            setRunningname(oldThreadName + "/" + probe.getName());
             probe.collect();
+            setRunningname(oldThreadName + ":finished");
         }
         stopCollect();
         long end = System.currentTimeMillis();
@@ -98,6 +106,15 @@ public class HostStarter extends StarterNode {
         else
             parentEquals = other.getParent() == null;
         return host.equals(other.getHost()) && parentEquals;
+    }
+
+    public String getRunningname() {
+        return runningname;
+    }
+
+    public void setRunningname(String runningname) {
+        Thread.currentThread().setName(runningname);
+        this.runningname = runningname;
     }
 
 }

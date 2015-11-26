@@ -1,12 +1,18 @@
 package jrds.probe;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Date;
 import java.util.Map;
 
+import jrds.ArchivesSet;
 import jrds.HostInfo;
+import jrds.JrdsSample;
 import jrds.Probe;
 import jrds.ProbeDesc;
+import jrds.store.EmptyExtractor;
+import jrds.store.Extractor;
+import jrds.store.Store;
 
 import org.apache.log4j.Level;
 
@@ -20,7 +26,7 @@ public class ContainerProbe extends Probe<Object, Number> {
         }
         @Override
         public Class<? extends Probe<?,?>> getProbeClass() {
-            return (Class<? extends Probe<?, ?>>) ContainerProbe.class;
+            return ContainerProbe.class;
         }
         public String getProbeName() {
             return "ContainerProbeDesc";
@@ -71,19 +77,59 @@ public class ContainerProbe extends Probe<Object, Number> {
     }
 
     /* (non-Javadoc)
-     * @see jrds.Probe#getRrdName()
-     */
-    @Override
-    public String getRrdName() {
-        return getName();
-    }
-
-    /* (non-Javadoc)
      * @see jrds.Probe#getQualifiedName()
      */
     @Override
     public String getQualifiedName() {
         return "/"  + getName();
+    }
+
+    /* (non-Javadoc)
+     * @see jrds.Probe#getMainStore()
+     */
+    @Override
+    public Store getMainStore() {
+        return new Store(){
+
+            @Override
+            public void commit(JrdsSample sample) {
+            }
+
+            @Override
+            public Map<String, Number> getLastValues() {
+                return Collections.emptyMap();
+            }
+
+            @Override
+            public boolean checkStoreFile(ArchivesSet archives) {
+                return true;
+            }
+
+            @Override
+            public Date getLastUpdate() {
+                return new Date();
+            }
+
+            @Override
+            public Object getStoreObject() {
+                return null;
+            }
+
+            @Override
+            public void closeStoreObject(Object object) {                
+            }
+
+            @Override
+            public Extractor getExtractor() {
+                return new EmptyExtractor();
+            }
+
+            @Override
+            public String getPath() {
+                return "";
+            }
+
+        };
     }
 
 }

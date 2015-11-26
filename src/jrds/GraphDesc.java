@@ -22,6 +22,8 @@ import jrds.Util.SiPrefix;
 import jrds.probe.IndexedProbe;
 import jrds.probe.UrlProbe;
 import jrds.probe.jdbc.JdbcProbe;
+import jrds.store.ExtractInfo;
+import jrds.store.Extractor;
 import jrds.webapp.ACL;
 import jrds.webapp.WithACL;
 
@@ -94,16 +96,18 @@ implements Cloneable, WithACL {
             @Override
             public String toString() {
                 return "percentile legend";
-            };
+            }
+
             public boolean datasource() {
                 return false;
             }
             public boolean toPlot() {
                 return false;
-            };
+            }
+
             public boolean legend() {
                 return true;
-            };
+            }
         },
         COMMENT {
             public String toString() {
@@ -122,59 +126,68 @@ implements Cloneable, WithACL {
         LINE {
             public void draw(RrdGraphDef rgd, String sn, Color color, String legend) {
                 rgd.line(sn, color, legend);
-            };
+            }
+
             @Override
             public String toString() {
                 return "line";
-            };
+            }
+
             public boolean datasource() {
                 return true;
             }
             public boolean toPlot() {
                 return true;
-            };
+            }
+
             public boolean legend() {
                 return true;
-            };
+            }
         },
         AREA {
             public void draw(RrdGraphDef rgd, String sn, Color color, String legend) {
                 rgd.area(sn, color, legend);
-            };
+            }
+
             @Override
             public String toString() {
                 return "area";
-            };
+            }
+
             public boolean datasource() {
                 return true;
             }
             public boolean toPlot() {
                 return true;
-            };
+            }
+
             public boolean legend() {
                 return true;
-            };
+            }
         },
         STACK {
             public void draw(RrdGraphDef rgd, String sn, Color color, String legend) {
                 rgd.stack(sn, color, legend);
-            };
+            }
+
             @Override
             public String toString() {
                 return "stack";
-            };
+            }
+
             public boolean datasource() {
                 return true;
             }
             public boolean toPlot() {
                 return true;
-            };
+            }
+
             public boolean legend() {
                 return true;
-            };
+            }
         };
 
-        public void draw(RrdGraphDef rgd, String sn, Color color, String legend) {};
+        public void draw(RrdGraphDef rgd, String sn, Color color, String legend) {}
 
         /**
          * To check if it will generate a plot, for color calculation
@@ -188,7 +201,7 @@ implements Cloneable, WithACL {
          * @return
          */
         public abstract boolean legend();
-    };
+    }
 
     //Old name kept
     static final public GraphType NONE = GraphType.NONE;
@@ -211,7 +224,7 @@ implements Cloneable, WithACL {
         },
         INDEX {
             public String resolve(GraphNode graph) {
-                StringBuffer retValue = new StringBuffer("empty");
+                StringBuilder retValue = new StringBuilder("empty");
                 if(graph.getProbe() instanceof IndexedProbe) {
                     retValue.setLength(0);
                     IndexedProbe ip = (IndexedProbe) graph.getProbe();
@@ -219,7 +232,7 @@ implements Cloneable, WithACL {
                     //Check to see if a label is defined and needed to add
                     String label = graph.getProbe().getLabel();
                     if(label != null) {
-                        retValue.append(" (" + label + ")");
+                        retValue.append(" (").append(label).append(")");
                     }
                 }
                 else {
@@ -482,7 +495,7 @@ implements Cloneable, WithACL {
         public static final Color resolveIndex(int i) {
             return Colors.values()[ i % Colors.length].getColor();
         }
-    };
+    }
 
     static private final class DsDesc {
         final String name;
@@ -500,7 +513,8 @@ implements Cloneable, WithACL {
                 this.host = host;
                 this.probe = probe;
             }
-        };
+        }
+
         final DsPath dspath;
         DsDesc(String name, String dsName, String rpn,
                 GraphType graphType, Color color, String legend,
@@ -596,9 +610,9 @@ implements Cloneable, WithACL {
     public static final class Dimension {
         public int width = 0;
         public int height = 0;
-    };
-    private Dimension dimension = null;
+    }
 
+    private Dimension dimension = null;
 
     /**
      * A constructor wich pre allocate the desired size
@@ -641,7 +655,7 @@ implements Cloneable, WithACL {
      * @param reversed
      * @param host
      * @param probe
-     * @param subDsName
+     * @param dsName
      */
     public void add(String name, String rpn,
             String graphType, String color, String legend,
@@ -650,7 +664,7 @@ implements Cloneable, WithACL {
             String host, String probe, String dsName) {
         if(logger.isTraceEnabled())
             logger.trace("Adding " + name + ", " + rpn + ", " + graphType + ", " + color + ", " + legend + ", " + consFunc + ", " + reversed + ", " + host + ", " + probe);
-        GraphType gt = null;
+        GraphType gt;
         if(graphType == null || "".equals(graphType)) {
             if(legend != null)
                 gt = GraphType.COMMENT;
@@ -669,7 +683,6 @@ implements Cloneable, WithACL {
 
         Color c = null;
         if(gt.toPlot()) {
-            c = Color.WHITE;
             if(color != null && color.toUpperCase().matches("^#[0-9A-F]{6}")) {
                 int r = Integer.parseInt(color.substring(1, 3), 16);
                 int g = Integer.parseInt(color.substring(3, 5), 16);
@@ -703,13 +716,16 @@ implements Cloneable, WithACL {
             name = Integer.toHexString((int)(Math.random() * Integer.MAX_VALUE));
         }
         //Auto generated legend
-        if(legend == null && name != null && gt.legend())
+        if(legend == null && gt.legend())
             legend = name;
 
         Integer valPercentile = null;
         if(percentile != null && ! "".equals(percentile)) {
             valPercentile = jrds.Util.parseStringNumber(percentile, Integer.valueOf(0));
         }
+        logger.trace(Util.delayedFormatString(
+                "Adding '%s': %s/'%s', %s, %s, '%s', %s, %s, %d, %s, %s",
+                name, dsName, rpn, graphType, color, legend, consFunc, reversed, valPercentile, host, probe));
         add(name, dsName, rpn, gt, c, legend, cf, reversed != null, valPercentile, host, probe);
     }
 
@@ -754,18 +770,6 @@ implements Cloneable, WithACL {
         }
     }
 
-    /**
-     * return the RrdGraphDef for this graph, used the indicated probe
-     *
-     * @param probe Probe
-     * @return RrdGraphDef
-     * @throws IOException
-     * @throws RrdException
-     */
-    public RrdGraphDef getGraphDef(Probe<?,?> probe) throws IOException {
-        return getGraphDef(probe, null);
-    }
-
     public RrdGraphDef getEmptyGraphDef() {
         RrdGraphDef retValue = new RrdGraphDef();
         if( ! Double.isNaN(lowerLimit))
@@ -797,24 +801,30 @@ implements Cloneable, WithACL {
      * @param defProbe The probe to get values from
      * @param customData some custom data, they override existing values in the associated probe
      */
-    public void fillGraphDef(RrdGraphDef graphDef, Probe<?, ?> defProbe,
+    public void fillGraphDef(RrdGraphDef graphDef, Probe<?, ?> defProbe, ExtractInfo ei,
             Map<String, ? extends Plottable> customData) {
         HostsList hl = defProbe.getHostList();
         List<DsDesc> toDo = new ArrayList<DsDesc>();
         //The datasources already found
         Set<String> datasources = new HashSet<String>();
 
+        //The needed extractors
+        Map<Probe<?,?>, Extractor> probeDS = new HashMap<Probe<?,?>, Extractor>(1);
+        probeDS.put(defProbe, defProbe.getMainStore().getExtractor());
+
         for(DsDesc ds: allds) {
-            boolean complete = false;
-            // not a data source, don't try to add it in datasources
+            boolean complete;
+            //Not a data source, don't try to add it in datasources
             if(! ds.graphType.datasource()) {
                 complete = true;
             }
             //The graph is a percentile
             else if(ds.percentile != null) {
                 complete = true;
-                graphDef.percentile(ds.name, ds.dsName, ds.percentile);
-                datasources.add(ds.name);
+                if(! datasources.contains(ds.name)) {
+                    graphDef.percentile(ds.name, ds.dsName, ds.percentile);
+                    datasources.add(ds.name);
+                }
             }
             //A rpn datasource
             else if (ds.rpn != null) {
@@ -824,6 +834,7 @@ implements Cloneable, WithACL {
                     datasources.add(ds.name);
                 }
             }
+            //A legend
             else if(ds.graphType == GraphType.LEGEND) {
                 complete = true;                
             }
@@ -847,8 +858,7 @@ implements Cloneable, WithACL {
                     if(pathHost == null) {
                         pathHost = defProbe.getHost().getName();
                     }
-                    if(logger.isTraceEnabled())
-                        logger.trace("External probe path: " + pathHost + "/" + ds.dspath.probe + "/" + ds.dsName);
+                    logger.trace(jrds.Util.delayedFormatString("External probe path: %s/%s/%s", pathHost, ds.dspath.probe, ds.dsName));
                     probe = hl.getProbeByPath(pathHost, ds.dspath.probe);
                     if(probe == null) {
                         logger.error("Invalide probe: " + pathHost + "/" + ds.dspath.probe);
@@ -859,15 +869,19 @@ implements Cloneable, WithACL {
                     logger.error("Invalide datasource "  + ds.dsName + ", not found in " + probe);
                     continue;
                 }
-
                 complete = true;
+
+                //Add the dsName for the probe found
+                if( !probeDS.containsKey(probe)) {
+                    probeDS.put(probe, probe.getMainStore().getExtractor());
+                }
+                Extractor ex = probeDS.get(probe);
                 if( ! datasources.contains(ds.name)) {
-                    String rrdName = probe.getRrdName();
-                    graphDef.datasource(ds.name, rrdName, ds.dsName, ds.cf);                
+                    ex.addSource(ds.name, ds.dsName);
                     datasources.add(ds.name);
                 }
                 else {
-                    logger.error("Datasource '" + ds.name + "' defined twice in " + name + ", for found: " + ds);
+                    logger.error("Datasource '" + ds.dsName + "' defined twice in " + name + ", for found: " + ds);
                 }
             }
             if (complete) {
@@ -878,6 +892,13 @@ implements Cloneable, WithACL {
                 logger.error("No way to plot " + ds.name + " in " + name + " found");
             }
         }
+
+        // Fill the graphdef with extracted data
+        for(Extractor x: probeDS.values()) {
+            x.fill(graphDef, ei);
+            x.release();
+        }
+
         // The title line, only if values block is required
         if( withSummary) {
             graphDef.comment(""); //We simulate the color box
@@ -889,10 +910,8 @@ implements Cloneable, WithACL {
             graphDef.comment("\\l");
         }
 
-        if(logger.isTraceEnabled()) {
-            logger.trace("Datasource: " + datasources);
-            logger.trace("Todo: " + toDo);
-        }
+        logger.trace(Util.delayedFormatString("Datasource: %s", datasources));
+        logger.trace(Util.delayedFormatString("Todo: : %s", toDo));
 
         String shortLegend = withSummary ? " \\g": null;
         for(DsDesc ds: toDo) {
@@ -900,20 +919,20 @@ implements Cloneable, WithACL {
             if(withSummary && ds.graphType.legend())
                 addLegend(graphDef, ds.name, ds.graphType, ds.legend);
         }
+
     }
 
     /**
      * return the RrdGraphDef for this graph, used the indicated probe
-     * any data can be overined of a provided map of Plottable
-     * @param probe
-     * @param ownData data used to overied probe's own values
+     * any data can be overridden of a provided map of {@link org.rrd4j.data.Plottable}
+     * @param defProbe
+     * @param ownData data used to override probe's own values
      * @return
      * @throws IOException
-     * @throws RrdException
      */
-    public RrdGraphDef getGraphDef(Probe<?,?> defProbe, Map<String, ? extends Plottable> ownData) throws IOException {
+    public RrdGraphDef getGraphDef(Probe<?,?> defProbe, ExtractInfo ei, Map<String, ? extends Plottable> ownData) throws IOException {
         RrdGraphDef retValue = getEmptyGraphDef();
-        fillGraphDef(retValue, defProbe, ownData);
+        fillGraphDef(retValue, defProbe, ei, ownData);
         return retValue;
     }
 
@@ -924,41 +943,79 @@ implements Cloneable, WithACL {
      * @param ownData data used to override probe's own values
      * @return
      * @throws IOException
-     * @throws RrdException
      */
-    public DataProcessor getPlottedDatas(Probe<?,?> probe, Map<String, Plottable> ownData, long start, long end) throws IOException {
-        DataProcessor retValue = new DataProcessor(start, end);
-        String rrdName = probe.getRrdName();
+    public DataProcessor getPlottedDatas(Probe<?,?> defProbe, ExtractInfo ei, Map<String, ? extends Plottable> customData) throws IOException {
+        DataProcessor retValue = ei.getDataProcessor();
+
+        HostsList hl = defProbe.getHostList();
+
+        //The datasources already found
+        Set<String> datasources = new HashSet<String>();
+
+        //The needed extractors
+        Map<Probe<?,?>, Extractor> probeDS = new HashMap<Probe<?,?>, Extractor>(1);
+        probeDS.put(defProbe, defProbe.getMainStore().getExtractor());
 
         String lastName = null;
         for(DsDesc ds: allds) {            
             boolean stack = ds.graphType == GraphType.STACK;
             boolean plotted = stack || ds.graphType == GraphType.LINE  || ds.graphType == GraphType.AREA;
             if (ds.rpn == null && ds.dsName != null) {
-                //Does the datas existe in the provided values
-                if(ownData != null && ownData.containsKey(ds.dsName)) {
-                    retValue.addDatasource(ds.name, ownData.get(ds.dsName));
+                //Does the datas exists in the provided values
+                if(customData != null && customData.containsKey(ds.dsName)) {
+                    retValue.addDatasource(ds.name, customData.get(ds.dsName));
                 }
-                //Or they might be on the associated rrd
-                else if(probe.dsExist(ds.dsName)) {
-                    retValue.addDatasource(ds.name, rrdName, ds.dsName, ds.cf);                             
+                else {
+                    Probe<?,?> probe = defProbe;
+                    if(ds.dspath != null) {
+                        logger.trace(jrds.Util.delayedFormatString("External probe path: %s/%s/%s", ds.dspath.host, ds.dspath.probe, ds.dsName));
+                        probe = hl.getProbeByPath(ds.dspath.host, ds.dspath.probe);
+                        if(probe == null) {
+                            logger.error("Invalide probe: " + ds.dspath.host + "/" + ds.dspath.probe);
+                            continue;
+                        }
+                    }
+                    if(! probe.dsExist(ds.dsName)) {
+                        logger.error("Invalide datasource "  + ds.dsName + ", not found in " + probe);
+                        continue;
+                    }
+                    logger.trace(Util.delayedFormatString("ds '%s' found in probe %s", ds.dsName, probe));
+                    //Add the dsName for the probe found
+                    if( !probeDS.containsKey(probe)) {
+                        probeDS.put(probe, probe.getMainStore().getExtractor());
+                    }
+                    Extractor ex = probeDS.get(probe);
+                    if( ! datasources.contains(ds.dsName)) {
+                        ex.addSource(ds.dsName, ds.name);
+                        datasources.add(ds.dsName);
+                    }
+                    else {
+                        logger.error("Datasource '" + ds.dsName + "' defined twice in " + name);
+                    }
                 }
             }
             else if(ds.rpn != null){
                 retValue.addDatasource(ds.name, ds.rpn);
+                datasources.add(ds.dsName);
             }
+
             if(plotted && stack) {
                 retValue.addDatasource("Plotted" + ds.name, lastName + ", " +  ds.name + ", +");
-            }
-            else if(plotted) {
+            } else if(plotted ) {
                 retValue.addDatasource("Plotted" + ds.name, ds.name);
             }
             lastName = ds.name; 
         }
         if(logger.isTraceEnabled()) {
-            logger.trace("Datastore for " + getName());
+            logger.trace("Datasource for " + getName());
             for(String s: retValue.getSourceNames())
                 logger.trace("\t" + s);
+        }
+
+        // Fill the dataprocessor with extracted data
+        for(Extractor x: probeDS.values()) {
+            x.fill(retValue, ei);
+            x.release();
         }
         return retValue;
     }
@@ -1156,6 +1213,7 @@ implements Cloneable, WithACL {
         try {
             unitExponent = SiPrefix.valueOf(exponent).getExponent();
         } catch (IllegalArgumentException e1) {
+            throw new RuntimeException("wrong unit exponent: " + exponent);
         }
         if(unitExponent == null) {
             try {
@@ -1178,7 +1236,8 @@ implements Cloneable, WithACL {
     }
 
     /**
-     * @param dimension the dimension of the graphic object to set
+     * @param height the height of the graphic object to set
+     * @param width the height of the graphic object to set
      */
     public void setDimension(int height, int width) {
         dimension = new Dimension();
@@ -1292,8 +1351,8 @@ implements Cloneable, WithACL {
         DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
         DocumentBuilder builder = factory.newDocumentBuilder();
         Document document = builder.newDocument();
-        Element root = 
-                (Element) document.createElement("graphdesc"); 
+        Element root =
+                document.createElement("graphdesc");
         document.appendChild(root);
         root.appendChild(document.createElement("name")).setTextContent(name);
         if(graphName != null)
@@ -1407,7 +1466,7 @@ implements Cloneable, WithACL {
     }
 
     /**
-     * @param withValues the withValues to set
+     * @param withSummary the withValues to set
      */
     public void setWithSummary(boolean withSummary) {
         this.withSummary = withSummary;

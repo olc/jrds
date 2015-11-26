@@ -1,9 +1,3 @@
-/*##########################################################################
- _##
- _##  $Id: Graph.java 236 2006-03-02 15:59:34 +0100 (jeu., 02 mars 2006) fbacchella $
- _##
- _##########################################################################*/
-
 package jrds.webapp;
 
 import java.io.IOException;
@@ -16,16 +10,18 @@ import javax.servlet.http.HttpServletResponse;
 
 import jrds.HostsList;
 import jrds.Probe;
+import jrds.store.ExtractInfo;
+import jrds.store.Extractor;
 
 import org.rrd4j.ConsolFun;
-import org.rrd4j.core.FetchData;
+import org.rrd4j.data.DataProcessor;
 
 /**
- * A servlet wich return datastore values from a probe.
+ * A servlet which returns datastore values from a probe.
  * It can be used in many way :
  * The simplest way is by using a URL of the form :
- * http://<it>server</it>/values/<it>host</it>/<it>probe.</it>
- * It will return all datastores values for this probe. By adding a /<it>datastore</i>, one can choose only 
+ * http://<em>server</em>/values/<em>host</em>/<em>probe.</em>
+ * It will return all datastores values for this probe. By adding a /<em>datastore</em>, one can choose only 
  * one data store.<p>
  * It's possible to refine the query with some arguments, using REST syntax.<p>
  * The argument can be:
@@ -37,7 +33,6 @@ import org.rrd4j.core.FetchData;
  * If there is only one value generated, it's displayed as is. Else the name is also shown as well as the last update value
  * in the form <code>datastore: value</code>
  * @author Fabrice Bacchella
- * @version $Revision: 236 $
  */
 public final class CheckValues extends JrdsServlet {
 
@@ -50,7 +45,7 @@ public final class CheckValues extends JrdsServlet {
 
         ParamsBean params = new ParamsBean(req, hl, "host", "probe", "dsname", "period", "cf");
 
-        int period = jrds.Util.parseStringNumber(params.getValue("period"), hl.getStep()).intValue();
+        long period = jrds.Util.parseStringNumber(params.getValue("period"), new Long(hl.getStep()));
         String cfName = params.getValue("cf");
         if(cfName == null || "".equals(cfName.trim()))
             cfName = "AVERAGE";
@@ -70,20 +65,34 @@ public final class CheckValues extends JrdsServlet {
                 return;
             }
             Date paste = new Date(lastupdate.getTime() - period * 1000);
-            FetchData fd = p.fetchData(paste, lastupdate);
+
+            Extractor ex = p.fetchData();
 
             String ds = params.getValue("dsname");
+
+            ExtractInfo ei = ExtractInfo.get().
+                    make(paste, lastupdate).
+                    make(p.getStep());
             if(ds != null && !  "".equals(ds.trim())) {
-                out.print(fd.getAggregate(ds.trim(), cf));
+                String dsName = ds.trim();
+                ex.addSource(dsName, dsName);
+                DataProcessor dp = ei.getDataProcessor(ex);
+                double val = dp.getAggregate(dsName, cf);
+                out.print(val);
             }
             else {
-                for(String dsName: fd.getDsNames()) {
-                    double val = fd.getAggregate(dsName, cf);
+                for(String dsName: p.getPd().getDs()) {
+                    ex.addSource(dsName, dsName);
+                }
+                DataProcessor dp = ei.getDataProcessor(ex);
+                for(String dsName: ex.getDsNames()) {
+                    double val = dp.getAggregate(dsName, cf);
                     out.println(dsName + ": " + val);
                 }
                 out.println("Last update: " + p.getLastUpdate());
                 out.println("Last update age (ms): " + (new Date().getTime() - p.getLastUpdate().getTime()));
             }
+            ex.release();
         }
         else {
             res.sendError(HttpServletResponse.SC_BAD_REQUEST, "No matching probe");

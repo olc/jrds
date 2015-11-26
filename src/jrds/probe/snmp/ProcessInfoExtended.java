@@ -9,12 +9,12 @@ import java.util.Map;
 import java.util.Set;
 import java.util.regex.Pattern;
 
+import jrds.JrdsSample;
 import jrds.factories.ProbeBean;
 import jrds.snmp.SnmpVars;
 import jrds.snmp.TabularIterator;
 
 import org.apache.log4j.Level;
-import org.rrd4j.core.Sample;
 import org.snmp4j.smi.OID;
 
 /**
@@ -35,8 +35,11 @@ public class ProcessInfoExtended extends RdsIndexedSnmpRrd {
 
     private Pattern pattern = Pattern.compile("^$");
 
+
     /**
-     * @param monitoredHost
+     * @param indexName
+     * @param patternString
+     * @return
      */
     public boolean configure(String indexName, String patternString) {
         try {
@@ -76,10 +79,10 @@ public class ProcessInfoExtended extends RdsIndexedSnmpRrd {
         for(SnmpVars s: ti) {
             List<OID> lk = new ArrayList<OID>(s.keySet());
             Collections.sort(lk);
-            StringBuffer cmdBuf = new StringBuffer();
+            StringBuilder cmdBuf = new StringBuilder();
             for(OID oid: lk) {
                 cmdBuf.append(s.get(oid));
-                cmdBuf.append(" ");
+                cmdBuf.append(' ');
             }
             if(pattern.matcher(cmdBuf.toString().trim()).matches()) {
                 int[] index = new int[1];
@@ -103,14 +106,14 @@ public class ProcessInfoExtended extends RdsIndexedSnmpRrd {
      * @see jrds.Probe#modifySample(org.rrd4j.core.Sample, java.util.Map)
      */
     @Override
-    public void modifySample(Sample oneSample, Map<OID, Object> snmpVars) {
+    public void modifySample(JrdsSample oneSample, Map<OID, Object> snmpVars) {
         log(Level.TRACE, "Will uses snmp values from %s", snmpVars);
         double max = 0;
         double min = Double.MAX_VALUE;
         double average = 0;
         int nbvalue = 0;
         double cpuUsed = 0;
-        for(Map.Entry<OID, Object> e: ((Map<OID, Object>)snmpVars).entrySet()) {
+        for(Map.Entry<OID, Object> e: snmpVars.entrySet()) {
             OID oid = e.getKey();
             if(oid.startsWith(hrSWRunPerfMem)) {
                 double value = ((Number)e.getValue()).doubleValue() * 1024;
@@ -124,11 +127,11 @@ public class ProcessInfoExtended extends RdsIndexedSnmpRrd {
             }
         }
         average /= nbvalue;
-        oneSample.setValue(NUM, nbvalue);
-        oneSample.setValue(MAX, max);
-        oneSample.setValue(MIN, min);
-        oneSample.setValue(AVERAGE, average);
-        oneSample.setValue(CPU, cpuUsed);		
+        oneSample.put(NUM, nbvalue);
+        oneSample.put(MAX, max);
+        oneSample.put(MIN, min);
+        oneSample.put(AVERAGE, average);
+        oneSample.put(CPU, cpuUsed);		
     }
 
     /* (non-Javadoc)
@@ -147,7 +150,7 @@ public class ProcessInfoExtended extends RdsIndexedSnmpRrd {
     }
 
     /**
-     * @param pattern the pattern to set
+     * @param patternString the pattern to set
      */
     public void setPattern(String patternString) {
         this.pattern = Pattern.compile(patternString);

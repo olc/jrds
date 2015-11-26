@@ -1,20 +1,20 @@
 package jrds.standalone;
 
-import java.beans.PropertyDescriptor;
-import java.io.File;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.ParameterizedType;
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 
+import jrds.GenericBean;
 import jrds.Probe;
 import jrds.ProbeConnected;
 import jrds.ProbeDesc;
 import jrds.PropertiesManager;
 import jrds.configuration.ConfigObjectFactory;
-import jrds.factories.ArgFactory;
 
 import org.apache.log4j.Logger;
 import org.rrd4j.core.DsDef;
@@ -34,14 +34,13 @@ public class EnumerateWikiProbes extends CommandStarterImpl {
         String className = c.getName();
         String classurlpath = className.replace('.', '/');
         String newurl = String.format(JAVADOCURLTEMPLATES, classurlpath);
-        String classLine = String.format("[[%s|%s]]", newurl, className);
-        return classLine;
+        return String.format("[[%s|%s]]", newurl, className);
     }
 
     public void start(String args[]) throws Exception {
-        PropertiesManager pm = new PropertiesManager(new File(propFile));
+        PropertiesManager pm = new PropertiesManager();
+        pm.importSystemProps();
         pm.update();
-        jrds.JrdsLoggerConfiguration.configure(pm);
 
         System.getProperties().setProperty("java.awt.headless","true");
 
@@ -135,21 +134,22 @@ public class EnumerateWikiProbes extends CommandStarterImpl {
         }
 
         //Enumerates the beans informations
-        Map<String, PropertyDescriptor> tryBeans = ArgFactory.getBeanPropertiesMap(pd.getProbeClass(), Probe.class);
+        List<GenericBean> tryBeans = new ArrayList<GenericBean>();
+        for(GenericBean bean: pd.getBeans()) {
+            tryBeans.add(bean);
+        }
+        Map<String, ProbeDesc.DefaultBean> defaultBeans = pd.getDefaultBeans();
         if(! tryBeans.isEmpty()) {
-            System.out.println();
             System.out.println(doTitle("Attributes"));
             System.out.println();
             System.out.println("^ Name ^ Default value ^ Description ^");
-            for(PropertyDescriptor bean: tryBeans.values()) {
-                Method readMethod = bean.getReadMethod();
+            for(GenericBean bean: tryBeans) { 
                 String defaultValue = "";
-                if(readMethod != null) {
-                    Object o = readMethod.invoke(p);
-                    if(o != null)
-                        defaultValue = o.toString();
+                ProbeDesc.DefaultBean currentAttribute = defaultBeans.get(bean.getName());
+                if(currentAttribute != null && ! currentAttribute.delayed) {
+                    defaultValue = currentAttribute.value;
                 }
-                if(bean != null && bean.getWriteMethod() != null)
+                if(bean != null )
                     System.out.println("| " + bean.getName() + " | " + defaultValue + " | | ");
             }
         }
@@ -172,7 +172,7 @@ public class EnumerateWikiProbes extends CommandStarterImpl {
         if(ProbeConnected.class.isAssignableFrom(c)) {
             System.out.println(doTitle("Connection class"));
 
-            Class<?> typeArg = null;
+            Class<?> typeArg;
             Class<?> curs = c;
             while(! ParameterizedType.class.isAssignableFrom(curs.getGenericSuperclass().getClass()))
                 curs = curs.getSuperclass();

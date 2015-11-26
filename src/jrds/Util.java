@@ -1,5 +1,6 @@
 package jrds;
 
+import java.beans.IntrospectionException;
 import java.beans.PropertyDescriptor;
 import java.io.CharArrayWriter;
 import java.io.IOException;
@@ -38,6 +39,7 @@ import javax.xml.transform.stream.StreamSource;
 import jrds.probe.IndexedProbe;
 import jrds.probe.UrlProbe;
 import jrds.starter.HostStarter;
+import net.iharder.Base64;
 
 import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
@@ -62,12 +64,8 @@ public class Util {
         }
     }
 
-    private static final String BASE64_CHARS =
-            "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+_=";
-    private static final char[] BASE64_CHARSET = BASE64_CHARS.toCharArray();
-
     /**
-     * The SI prefix as an enumeration, with factor provided.<p/>
+     * The SI prefix as an enumeration, with factor provided.<p>
      * More informations can be found at <a target="_blank" href="http://en.wikipedia.org/wiki/SI_prefix">Wikipedia's page</a> 
      */
     public enum SiPrefix {
@@ -114,7 +112,7 @@ public class Util {
         public int getExponent() {
             return exponent;
         }
-    };
+    }
 
     static final private ErrorListener el = new ErrorListener() {
         public void error(TransformerException e) throws TransformerException {
@@ -134,7 +132,7 @@ public class Util {
 
     /**
      * Return the md5 digest value of a string, encoded in base64
-     * @param The string to use
+     * @param s The string to use
      * @return the printable md5 digest value for s
      */
     public static String stringSignature(String s)
@@ -144,49 +142,7 @@ public class Util {
             md5digest.reset();
             digestval = md5digest.digest(s.getBytes());
         }
-        return toBase64(digestval);
-    }
-
-    /**
-
-     * <p>Converts a designated byte array to a Base-64 representation, with the	 
-     * exceptions that (a) leading 0-byte(s) are ignored, and (b) the character	 
-     * '.' (dot) shall be used instead of "+' (plus).</p>	 
-
-     * @param buffer an arbitrary sequence of bytes to represent in Base-64.	 
-     * @return unpadded (without the '=' character(s)) Base-64 representation of	 
-     * the input.
-
-     */
-    private static String toBase64(byte[] buffer) {
-        int len = buffer.length;
-        int pos = 0;
-        StringBuffer sb = new StringBuffer((int) (len * 1.4) + 3 );
-
-        while(pos < len) {
-            byte b0 = 0, b1 = 0, b2 = 0;
-            b0 = buffer[pos++];
-            if(pos  < len )
-                b1 = buffer[pos++];
-            if(pos  < len)
-                b2 = buffer[pos++];
-            int c0 = (b0 & 0xFC) >>> 2;
-            sb.append(BASE64_CHARSET[c0]);
-            int c1 = ((b0 & 0x03) << 4) | ((b1 & 0xF0) >>> 4);
-            sb.append(BASE64_CHARSET[c1]);
-            int c2 = ((b1 & 0x0F) << 2) | ((b2 & 0xC0) >>> 6);
-            sb.append(BASE64_CHARSET[c2]);
-            int c3 = b2 & 0x3F;
-            sb.append(BASE64_CHARSET[c3]);
-        }
-        int mod = len %3;
-        if(mod == 2)
-            sb.deleteCharAt(sb.length() -1 );
-        else if(mod == 1) {
-            sb.deleteCharAt(sb.length() -1 );
-            sb.deleteCharAt(sb.length() -1 );
-        }
-        return sb.toString();	
+        return Base64.encodeBytes(digestval);
     }
 
     public static String cleanPath(String s){
@@ -237,7 +193,7 @@ public class Util {
     static private final Pattern attrSignature = Pattern.compile("attr\\.(.*)\\.signature");
     static private final Pattern attr = Pattern.compile("attr\\.(.*)");
 
-    static private final String findVariables(String in, int index, Map<String, Integer> indexes, Object... arguments) {
+    static private String findVariables(String in, int index, Map<String, Integer> indexes, Object... arguments) {
         Matcher m = varregexp.matcher(in);
         if(m.find()) {
             StringBuilder out = new StringBuilder();
@@ -270,13 +226,34 @@ public class Util {
             else if((varMatcher=attrSignature.matcher(var)).matches()) {
                 String beanName = varMatcher.group(1);
                 for(Object o: arguments) {
-                    try {
-                        PropertyDescriptor bean = new PropertyDescriptor(beanName, o.getClass());
-                        Method read = bean.getReadMethod();
-                        if(read != null)
-                            toAppend = stringSignature(read.invoke(o).toString());
-                        break;
-                    } catch (Exception e) {
+                    if(o == null) {
+                        continue;
+                    }
+                    // probe manage it's beans
+                    if(o instanceof Probe) {
+                        GenericBean bean = ((Probe<?,?>) o).getPd().getBean(beanName);
+                        if(bean != null) {
+                            Object beanValue = bean.get(o);
+                            if(beanValue != null) {
+                                toAppend = stringSignature(beanValue.toString());                                                         
+                            }
+                            else {
+                                toAppend = "";
+                            }
+                            break;
+                        }
+                    } else {
+                        try {
+                            PropertyDescriptor bean = new PropertyDescriptor(beanName, o.getClass());
+                            Method read = bean.getReadMethod();
+                            if(read != null)
+                                toAppend = stringSignature(read.invoke(o).toString());
+                            break;
+                        } catch (IntrospectionException e) {
+                            // not a bean, skip it
+                        } catch (Exception e) {
+                            logger.warn(Util.delayedFormatString("can't output bean %s for %s", beanName, o));
+                        }                        
                     }
                 }
             }
@@ -284,11 +261,34 @@ public class Util {
             else if((varMatcher=attr.matcher(var)).matches()) {
                 String beanName = varMatcher.group(1);
                 for(Object o: arguments) {
-                    try {
-                        PropertyDescriptor bean = new PropertyDescriptor(beanName, o.getClass());
-                        toAppend = bean.getReadMethod().invoke(o).toString();
-                        break;
-                    } catch (Exception e) {
+                    if(o == null) {
+                        continue;
+                    }
+                    // probe manage it's beans
+                    if(o instanceof Probe) {
+                        GenericBean bean = ((Probe<?,?>) o).getPd().getBean(beanName);
+                        if(bean != null) {
+                            Object beanValue = bean.get(o);
+                            if(beanValue != null) {
+                                toAppend = beanValue.toString();                                                            
+                            }
+                            else {
+                                toAppend = "";
+                            }
+                            break;
+                        }
+                    } else {
+                        try {
+                            PropertyDescriptor bean = new PropertyDescriptor(beanName, o.getClass());
+                            Method read = bean.getReadMethod();
+                            if(read != null)
+                                toAppend = read.invoke(o).toString();
+                            break;
+                        } catch (IntrospectionException e) {
+                            // not a bean, skip it
+                        } catch (Exception e) {
+                            logger.warn(Util.delayedFormatString("can't output bean %s for %s", beanName, o), e);
+                        }                        
                     }
                 }
             }
@@ -296,7 +296,7 @@ public class Util {
             else  {
                 if(! indexes.containsKey(var)) {
                     indexes.put(var, index++);
-                };
+                }
                 int slot = indexes.get(var) + 1;
                 toAppend = "%"  + Integer.toString(slot) + "$s";
             }
@@ -324,7 +324,7 @@ public class Util {
 
         Matcher m = oldvarregexp.matcher(template);
         String last = template;
-        StringBuffer buffer = new StringBuffer();
+        StringBuilder buffer = new StringBuilder();
         while(m.find()) {
             if(m.group(1) !=  null)
                 buffer.append(m.group(1));
@@ -377,6 +377,12 @@ public class Util {
             @Override
             String toString(Object o) {
                 return ((HostInfo) o).getName();
+            }
+        },
+        dnsname {
+            @Override
+            String toString(Object o) {
+                return ((HostInfo) o).getDnsName();
             }
         },
         probename {
@@ -477,6 +483,7 @@ public class Util {
             }
             if( o instanceof HostInfo) {
                 check(o, indexes, values, evaluate.host);
+                check(o, indexes, values, evaluate.dnsname);
             }
             if(o instanceof GraphDesc) {
                 check(o, indexes, values, evaluate.graphdesc_name);
@@ -519,8 +526,7 @@ public class Util {
         try {
             Class<NumberClass> clazz = (Class<NumberClass>) defaultVal.getClass();
             Constructor<NumberClass> c = clazz.getConstructor(String.class);
-            NumberClass n = c.newInstance(toParse);
-            return n;
+            return c.newInstance(toParse);
         } catch (SecurityException e) {
         } catch (NoSuchMethodException e) {
         } catch (IllegalArgumentException e) {
@@ -541,8 +547,7 @@ public class Util {
 
         try {
             Constructor<NumberClass> c = nc.getConstructor(String.class);
-            NumberClass n = c.newInstance(toParse);
-            return n;
+            return c.newInstance(toParse);
         } catch (SecurityException e) {
         } catch (NoSuchMethodException e) {
         } catch (IllegalArgumentException e) {
@@ -556,7 +561,7 @@ public class Util {
     public static void serialize(Document d, OutputStream out, URL transformerLocation, Map<String, String> properties) throws TransformerException, IOException {
         Source source = new DOMSource(d);
 
-        Transformer transformer = null;
+        Transformer transformer;
         if(transformerLocation != null) {
             Source stylesource = new StreamSource(transformerLocation.toString());
             transformer = tFactory.newTransformer(stylesource);
@@ -612,13 +617,13 @@ public class Util {
         };
     }
 
+    public static final Comparator<String> nodeComparator = jrds.Util.AlphanumericSorting();
+
     /**
      * Return an alpha numeric sorter where host2 is before host10
      * Copied from http://sanjaal.com/java/tag/sample-alphanumeric-sorting/
      * @return
      */
-    public static final Comparator<String> nodeComparator = jrds.Util.AlphanumericSorting();
-
     private static Comparator<String> AlphanumericSorting() {
         return new Comparator<String>() {
 
@@ -700,7 +705,7 @@ public class Util {
         if(namedLogger.isEnabledFor(l)) {
             StringBuilder line = new StringBuilder();
             if(source != null)
-                line.append("[" + source.toString() + "] ");
+                line.append("[").append(source.toString()).append("] ");
             line.append(String.format(format, args));
             namedLogger.log(l, line.toString());
             //NPE should never happen, so it's always logged
@@ -709,7 +714,6 @@ public class Util {
                 e.printStackTrace(new PrintWriter(w));
                 namedLogger.log(l, "Error stack: ");
                 namedLogger.log(l, w);
-
             }
         }
     }

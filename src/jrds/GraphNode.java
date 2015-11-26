@@ -1,17 +1,18 @@
 package jrds;
 
-import java.beans.PropertyDescriptor;
-import java.lang.reflect.Constructor;
+import java.io.IOException;
 import java.util.Collections;
 import java.util.LinkedList;
 import java.util.Map;
 
 import jrds.configuration.HostBuilder;
 import jrds.factories.ArgFactory;
+import jrds.store.ExtractInfo;
 import jrds.webapp.ACL;
 import jrds.webapp.WithACL;
 
 import org.apache.log4j.Logger;
+import org.rrd4j.data.DataProcessor;
 
 /**
  * @author Fabrice Bacchella
@@ -27,7 +28,7 @@ public class GraphNode implements Comparable<GraphNode>, WithACL {
     private String name = null;
     private String graphTitle = null;
     private ACL acl = ACL.ALLOWEDACL;
-    private PlottableMap customData = null;
+    private PlottableMap customData = PlottableMap.Empty;
     private Map<String, String> beans = Collections.emptyMap();
 
     /**
@@ -78,7 +79,7 @@ public class GraphNode implements Comparable<GraphNode>, WithACL {
         return gd.getViewTree(this);
     }
 
-    private final String parseTemplate(String template) {
+    private String parseTemplate(String template) {
         Object[] arguments = {
                 "${graphdesc.name}",
                 "${host}",
@@ -136,21 +137,19 @@ public class GraphNode implements Comparable<GraphNode>, WithACL {
 
         try {
             Graph g =  gclass.getConstructor(GraphNode.class).newInstance(this);
-            Map<String, PropertyDescriptor> beansList = ArgFactory.getBeanPropertiesMap(gclass, Graph.class);
+            Map<String, GenericBean> beansList = ArgFactory.getBeanPropertiesMap(gclass, Graph.class);
 
             //Resolve the beans
             for(Map.Entry<String, String> e: beans.entrySet()) {
                 String name = Util.parseTemplate(e.getKey(), probe);
                 String textValue = Util.parseTemplate(e.getValue(), probe);
-                PropertyDescriptor bean = beansList.get(name);
+                GenericBean bean = beansList.get(name);
                 if(bean == null) {
-                    logger.error(String.format("Unknonw bean for %s: %s", gd.getName() , name));
+                    logger.error(String.format("Unknown bean for %s: %s", gd.getName() , name));
                     continue;
                 }
                 logger.trace(Util.delayedFormatString("Found attribute %s with value %s", name, textValue));
-                Constructor<?> c = bean.getPropertyType().getConstructor(String.class);
-                Object value = c.newInstance(textValue);
-                bean.getWriteMethod().invoke(g, value);
+                bean.set(g, textValue);
             }
             return g;
         } catch (Exception e) {
@@ -195,6 +194,14 @@ public class GraphNode implements Comparable<GraphNode>, WithACL {
      */
     public void setCustomData(PlottableMap customData) {
         this.customData = customData;
+    }
+
+    public DataProcessor getPlottedDate(ExtractInfo ei) throws IOException {
+        PlottableMap pm = getCustomData();
+        pm.configure(ei);
+        DataProcessor dp = gd.getPlottedDatas(probe, ei, pm);
+        dp.processData();
+        return dp;
     }
 
     public Map<String, String> getBeans() {

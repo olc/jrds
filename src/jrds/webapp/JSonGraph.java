@@ -7,11 +7,12 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import jrds.GraphDesc;
+import jrds.GraphDesc.Dimension;
 import jrds.GraphNode;
 import jrds.HostsList;
 import jrds.Probe;
 import jrds.Renderer;
+import jrds.Util;
 
 import org.apache.log4j.Logger;
 import org.json.JSONException;
@@ -36,9 +37,9 @@ public class JSonGraph extends JSonData {
         if(params.isSorted() && graphs.size() > 1) {
             Collections.sort(graphs, new Comparator<GraphNode>() {
                 public int compare(GraphNode g1, GraphNode g2) {
-                    int order = String.CASE_INSENSITIVE_ORDER.compare(g1.getName(), g2.getName());
+                    int order = Util.nodeComparator.compare(g1.getName(), g2.getName());
                     if(order == 0)
-                        order = String.CASE_INSENSITIVE_ORDER.compare(g1.getProbe().getHost().getName(), g2.getProbe().getHost().getName());
+                        order = Util.nodeComparator.compare(g1.getProbe().getHost().getName(), g2.getProbe().getHost().getName());
                     return order;
                 }
             });
@@ -73,11 +74,10 @@ public class JSonGraph extends JSonData {
         imgProps.put("probename", p.getName());
         imgProps.put("qualifiedname", graph.getQualifiedName());
 
-        imgProps.put("qualifiedname", graph.getQualifiedName());
-        GraphDesc gd = gn.getGraphDesc();
-        if(gd !=null && gd.getDimension() != null) {
-            imgProps.put("height", gd.getDimension().height);
-            imgProps.put("width", gd.getDimension().width);
+        Dimension d = graph.getDimension();
+        if(d != null) {
+            imgProps.put("height", d.height);
+            imgProps.put("width", d.width);
         }
         imgProps.put("graph",params.doArgsMap(graph, true));
         imgProps.put("history",params.doArgsMap(graph, false));

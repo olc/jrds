@@ -1,8 +1,5 @@
 package jrds.webapp;
 
-//----------------------------------------------------------------------------
-//$Id$
-
 import java.io.IOException;
 import java.io.OutputStream;
 import java.text.DateFormat;
@@ -17,21 +14,20 @@ import javax.servlet.http.HttpServletResponse;
 
 import jrds.Period;
 import jrds.Probe;
+import jrds.store.ExtractInfo;
 
 import org.apache.log4j.Logger;
-import org.rrd4j.core.FetchData;
 import org.rrd4j.data.DataProcessor;
 
 /**
  * This servlet is used to download the values of a graph as an xml file
  *
  * @author Fabrice Bacchella
- * @version $Revision$
  */
 
 public class Download extends JrdsServlet {
     static final private Logger logger = Logger.getLogger(Download.class);
-    private static final String CONTENT_TYPE = "text/csv";
+    static final String CONTENT_TYPE = "text/csv";
     private static final SimpleDateFormat humanDateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
     protected static final ThreadLocal<DateFormat> epochFormat = 
             new ThreadLocal<DateFormat> () {
@@ -49,22 +45,8 @@ public class Download extends JrdsServlet {
                     return new Date(Long.parseLong(source) * 1000);
                 }
             };
-        };
+        }
     };
-
-    //    protected static final DateFormat epochFormat = new DateFormat() {
-    //        @Override
-    //        public StringBuffer format(Date date, StringBuffer toAppendTo,
-    //                FieldPosition arg2) {
-    //            return toAppendTo.append(date.getTime() / 1000);
-    //        }
-    //        @Override
-    //        public Date parse(String source, ParsePosition pos) {
-    //            pos.setIndex(source.length());
-    //            return new Date(Long.parseLong(source) * 1000);
-    //        }
-    //        
-    //    };
 
     public void doGet(HttpServletRequest req, HttpServletResponse res) {
 
@@ -83,6 +65,7 @@ public class Download extends JrdsServlet {
                     params = getParamsBean(req, "cmd", "host", "graphname");                   
                 }
                 else {
+                    logger.error(jrds.Util.delayedFormatString("Invalid command: %s", cmd));
                     res.setStatus(HttpServletResponse.SC_BAD_REQUEST);
                     return;
                 }
@@ -95,11 +78,10 @@ public class Download extends JrdsServlet {
         }
 
 
-        DataProcessor sourceDp = null;
-        String fileName = null;
-        jrds.Graph graph;
+        DataProcessor sourceDp;
+        String fileName;
         if("graph".equals(cmd)) {
-            graph = params.getGraph(this);
+            jrds.Graph graph = params.getGraph(this);
             if(graph == null) {
                 res.setStatus(HttpServletResponse.SC_NOT_FOUND);
                 return;   
@@ -129,14 +111,12 @@ public class Download extends JrdsServlet {
                 return;   
             }
             Period p = params.getPeriod();
-            FetchData fd = probe.fetchData(p.getBegin(), p.getEnd());
-            sourceDp = new DataProcessor(p.getBegin(), p.getEnd());
-            for(String dsName: fd.getDsNames()) {
-                sourceDp.addDatasource(dsName, fd);
-            }
+            ExtractInfo ei = ExtractInfo.get()
+                    .make(p.getBegin(), p.getEnd())
+                    .make(probe.getStep());
             try {
-                sourceDp.processData();
-                fileName = probe.getRrdName().replaceFirst("\\.rrd",".csv");
+                sourceDp = probe.extract(ei);
+                fileName = probe.getName().replaceFirst("\\.rrd",".csv");
             } catch (IOException e) {
                 logger.error("Unable to process probe data");
                 res.setStatus(HttpServletResponse.SC_BAD_REQUEST);
@@ -164,7 +144,7 @@ public class Download extends JrdsServlet {
         sourcesline.append("Date,");
         for(String name: sources) {
             if(! name.startsWith("rev_"))
-                sourcesline.append(name + ",");
+                sourcesline.append(name).append(",");
         }
         sourcesline.deleteCharAt(sourcesline.length() - 1);
         sourcesline.append("\r\n");
@@ -173,10 +153,10 @@ public class Download extends JrdsServlet {
         long[] ts = dp.getTimestamps();
         for(int i=0; i < ts.length; i++) {
             sourcesline.setLength(0);
-            sourcesline.append(exportDateFormat.format(org.rrd4j.core.Util.getDate(ts[i])) + ",");
+            sourcesline.append(exportDateFormat.format(org.rrd4j.core.Util.getDate(ts[i]))).append(",");
             for(int j = 0; j < sources.length; j++) {
                 if(! sources[j].startsWith("rev_"))
-                    sourcesline.append(values[j][i]+",");
+                    sourcesline.append(values[j][i]).append(",");
             }
             sourcesline.deleteCharAt(sourcesline.length() - 1);
             sourcesline.append("\r\n");

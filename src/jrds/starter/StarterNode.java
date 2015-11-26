@@ -1,10 +1,10 @@
 package jrds.starter;
 
 import java.lang.reflect.Method;
-import java.util.HashSet;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 import jrds.HostsList;
 import jrds.PropertiesManager;
@@ -22,6 +22,7 @@ public abstract class StarterNode implements StartersSet {
     private StarterNode parent = null;
     private int timeout = -1;
     private int step = -1;
+    private int slowCollectTime = -1;
 
     public StarterNode() {
         if (this instanceof HostsList) {
@@ -113,24 +114,20 @@ public abstract class StarterNode implements StartersSet {
         if(allStarters == null)
             return;
 
-        //A set with failed starters
-        Set<Object> failed = new HashSet<Object>();
-        for(Map.Entry<Object, Starter> me: allStarters.entrySet()) {
+        // needed because started can failed (and be removed) or add other starters
+        List<Map.Entry<Object, Starter>> buffer = new ArrayList<>(allStarters.entrySet());
+        for(Map.Entry<Object, Starter> me: buffer) {
             try {
                 me.getValue().configure(pm);
             } catch (Exception e) {
-                failed.add(me.getKey());
+                allStarters.remove(me.getKey());
                 log(Level.ERROR, e, "Starter %s failed to configure: %s", me.getValue(), e);
             }
-        }
-        // Failed starter are removed
-        for(Object k: failed) {
-            allStarters.remove(k);
         }
     }
 
     public <StarterClass extends Starter> StarterClass find(Class<StarterClass> sc) {
-        Object key = null;
+        Object key;
         try {
             Method m = sc.getMethod("makeKey", StarterNode.class);
             key = m.invoke(null, this);
@@ -232,7 +229,7 @@ public abstract class StarterNode implements StartersSet {
     @Deprecated
     public Starter registerStarter(Starter s, StarterNode parent) {
         return registerStarter(s);
-    };
+    }
 
     /* (non-Javadoc)
      * @see jrds.starter.StartersSet#find(java.lang.Class, jrds.starter.StarterNode)
@@ -276,6 +273,14 @@ public abstract class StarterNode implements StartersSet {
      */
     public void setStep(int step) {
         this.step = step;
+    }
+
+    public int getSlowCollectTime() {
+        return slowCollectTime;
+    }
+
+    public void setSlowCollectTime(int slowCollectTime) {
+        this.slowCollectTime = slowCollectTime;
     }
 
 }

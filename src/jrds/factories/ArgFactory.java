@@ -15,6 +15,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
+import jrds.GenericBean;
 import jrds.Util;
 import jrds.factories.xml.JrdsElement;
 
@@ -34,10 +35,10 @@ public final class ArgFactory {
     /**
      * This method build a list from an XML enumeration of element.
      * 
-     * The enumeration is made of :<p/>
-     * <code>&lt;arg type="type" value="value"></code><p/>
-     * or<p/>
-     * <code>&lt;arg type="type">value&lt;/value></code><p/>
+     * The enumeration is made of :<p>
+     * <code>&lt;arg type="type" value="value"&gt;</code><p>
+     * or<p>
+     * <code>&lt;arg type="type"&gt;value&lt;/value&gt;</code><p>
      * This method is recursive, so it if finds some <code>list</code> elements instead of an <code>arg</code>, it will build a sub-list.
      * 
      * Unknown element will be silently ignored.
@@ -55,7 +56,7 @@ public final class ArgFactory {
             logger.trace(Util.delayedFormatString("Element to check: %s", localName));
             if("arg".equals(localName)) {
                 String type = listNode.getAttribute("type");
-                String value = null;
+                String value;
                 if(listNode.hasAttribute("value"))
                     value = listNode.getAttribute("value");
                 else
@@ -126,7 +127,7 @@ public final class ArgFactory {
      */
     public static Object ConstructFromString(Class<?> clazz, String value) throws InvocationTargetException {
         try {
-            Constructor<?> c = null;
+            Constructor<?> c;
             if(! clazz.isPrimitive() ) {
                 c = clazz.getConstructor(String.class);
             }
@@ -153,6 +154,8 @@ public final class ArgFactory {
             }
             else if(clazz == Character.TYPE) {
                 c = Character.class.getConstructor(String.class);
+            } else {
+                throw new IllegalArgumentException("no single String constructor found");
             }
             return c.newInstance(value);
         } catch (SecurityException e) {
@@ -164,8 +167,6 @@ public final class ArgFactory {
         } catch (InstantiationException e) {
             throw new InvocationTargetException(e, clazz.getName());
         } catch (IllegalAccessException e) {
-            throw new InvocationTargetException(e, clazz.getName());
-        } catch (InvocationTargetException e) {
             throw new InvocationTargetException(e, clazz.getName());
         }
     }
@@ -189,6 +190,8 @@ public final class ArgFactory {
             Class<?> setArgType = bean.getPropertyType();
             Object argInstance = ArgFactory.ConstructFromString(setArgType, beanValue);
             setMethod.invoke(o, argInstance);       
+        } catch (InvocationTargetException e) {
+            throw new InvocationTargetException(e.getCause(), "invalid bean '" + beanName + "' for " + o);
         } catch (Exception e) {
             throw new InvocationTargetException(e, "invalid bean '" + beanName + "' for " + o);
         }
@@ -200,11 +203,11 @@ public final class ArgFactory {
      * @return
      * @throws InvocationTargetException
      */
-    static public Map<String, PropertyDescriptor> getBeanPropertiesMap(Class<?> c, Class<?> topClass) throws InvocationTargetException {
+    static public Map<String, GenericBean> getBeanPropertiesMap(Class<?> c, Class<?> topClass) throws InvocationTargetException {
         Set<ProbeBean> beansAnnotations = ArgFactory.enumerateAnnotation(c, ProbeBean.class, topClass);
         if(beansAnnotations.isEmpty())
             return Collections.emptyMap();
-        Map<String, PropertyDescriptor> beanProperties = new HashMap<String, PropertyDescriptor>();
+        Map<String, GenericBean> beanProperties = new HashMap<String, GenericBean>();
         for(ProbeBean annotation: beansAnnotations) {
             for(String beanName: annotation.value()) {
                 //Bean already found, don't work on it again
@@ -213,7 +216,7 @@ public final class ArgFactory {
                 }
                 try {
                     PropertyDescriptor bean = new PropertyDescriptor(beanName, c);
-                    beanProperties.put(bean.getName(), bean);
+                    beanProperties.put(bean.getName(), new GenericBean.JavaBean(bean));
                 } catch (IntrospectionException e) {
                     throw new InvocationTargetException(e, "invalid bean " + beanName + " for " + c.getName());
                 }
@@ -236,6 +239,12 @@ public final class ArgFactory {
             if(searched.isAnnotationPresent(annontationClass)) {
                 T annotation = searched.getAnnotation(annontationClass);
                 annotations.add(annotation);
+            }
+            for(Class<?> i: searched.getInterfaces()) {
+                if(i.isAnnotationPresent(annontationClass)) {
+                    T annotation = i.getAnnotation(annontationClass);
+                    annotations.add(annotation);
+                }
             }
             searched = searched.getSuperclass();
         }

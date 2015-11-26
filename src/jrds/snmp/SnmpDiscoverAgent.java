@@ -43,6 +43,7 @@ public class SnmpDiscoverAgent extends DiscoverAgent {
                 snmp = new Snmp(new DefaultUdpTransportMapping());
                 snmp.listen();
             } catch (IOException e) {
+                log(Level.ERROR, e, "Discovery SNMP listener failed to start: %s", e.getMessage());
             }
             return true;
         }
@@ -120,7 +121,7 @@ public class SnmpDiscoverAgent extends DiscoverAgent {
             log(Level.TRACE, "Trying to discover probe %s", name);
 
             try {
-                boolean found = false;
+                boolean found;
                 if(summary.isIndexed ) {
                     found = (enumerateIndexed(hostEleme, summary, withOid) > 0);
                 }
@@ -149,7 +150,8 @@ public class SnmpDiscoverAgent extends DiscoverAgent {
     private boolean doesExist(JrdsElement hostEleme, ProbeDescSummary summary) throws IOException {
         OID OidExist = new OID(summary.specifics.get("existOid"));
         Map<OID, Object> found = SnmpRequester.RAW.doSnmpGet(active, Collections.singletonList(OidExist));
-        if(found.size() > 0) {
+        // Some broken SNMP implementation return null value (thanks AIX), that's no good
+        if(found.size() > 0 && found.values().iterator().next() != null) {            
             addProbe(hostEleme, summary.name, null, null, null, null);
             log(Level.TRACE, "%s does exist: %s", summary.name, found.values());
             return true;
@@ -162,6 +164,10 @@ public class SnmpDiscoverAgent extends DiscoverAgent {
     private String getLabel(LocalSnmpConnection active, OID labelOID) throws IOException {
         Map<OID, Object> rowLabel = SnmpRequester.RAW.doSnmpGet(active, Collections.singletonList(labelOID));
         for(Map.Entry<OID, Object> labelEntry: rowLabel.entrySet()) {
+            if(labelEntry.getValue() == null) {
+                log(Level.ERROR, "null label at %s", labelEntry.getKey());
+                continue;
+            }
             String label = labelEntry.getValue().toString();
             if(label.length() >= 1)
                 return label;
@@ -275,20 +281,13 @@ public class SnmpDiscoverAgent extends DiscoverAgent {
 
         String doesExistOid = summary.specifics.get("existOid");
         //drop indexed probes without OID to check presence
-        if(!summary.isIndexed && (doesExistOid == null || doesExistOid.isEmpty()))
-            return false;
-
-        return true;
+        return !(!summary.isIndexed && (doesExistOid == null || doesExistOid.isEmpty()));
     }
 
     @Override
     public void addProbe(JrdsElement hostElement, ProbeDescSummary summary,
             HttpServletRequest request) {
         String name = summary.name;
-
-        //Don't discover if asked to don't do
-        if(summary.specifics.get("nodiscover") != null)
-            return;
 
         summaries.put(summary.name, summary);
         String hidesStr = summary.specifics.get("hides");
@@ -311,7 +310,6 @@ public class SnmpDiscoverAgent extends DiscoverAgent {
         else {
             sortedProbeName.add(name);
         }
-        return;
     }
 
 }

@@ -17,9 +17,9 @@ public class ListenerTest {
         @Override
         public void register(PassiveProbe p) {
         }
-        
+
         public void setDummy(String dummy) {
-            
+
         }
 
         public String getDummy() {
@@ -54,8 +54,8 @@ public class ListenerTest {
             return null;
         }
         
-    };
-    
+    }
+
     static Logger logger = Logger.getLogger(ListenerTest.class);
 
     @BeforeClass

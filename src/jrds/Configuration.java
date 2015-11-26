@@ -3,6 +3,7 @@ package jrds;
 import java.util.Properties;
 
 import jrds.starter.Timer;
+import jrds.store.StoreFactory;
 
 import org.apache.log4j.Logger;
 
@@ -37,17 +38,19 @@ public class Configuration {
         return conf;
     }
 
+    public static final synchronized void stopConf() {
+        conf.stop();
+    }
+
     private Configuration(Properties p) {
         propertiesManager.join(p);
         propertiesManager.importSystemProps();
         propertiesManager.update();
 
-        StoreOpener.prepare(propertiesManager.rrdbackend, propertiesManager.dbPoolSize);
-
         hostsList = new HostsList(propertiesManager);
     }
 
-    public void start() {
+    private void start() {
         //If in read-only mode, no scheduler
         if(propertiesManager.readonly)
             return;
@@ -55,19 +58,17 @@ public class Configuration {
         shutDownHook = new Thread("Collect-Shutdown") {
             @Override
             public void run() {
-                if(hostsList != null) {
-                    hostsList.stopTimers();
-                    if(hostsList.getRenderer() != null)
-                        hostsList.getRenderer().finish();                    
-                }
+                hostsList.stop();
+                if(hostsList.getRenderer() != null)
+                    hostsList.getRenderer().finish();
             }
         };
         Runtime.getRuntime().addShutdownHook(shutDownHook);
         hostsList.startTimers();
     }
 
-    public void stop() {
-        hostsList.stopTimers();
+    private void stop() {
+        hostsList.stop();
         Thread.yield();
         //We don't care if it failed, just try
         try {
@@ -75,7 +76,6 @@ public class Configuration {
                 Runtime.getRuntime().removeShutdownHook(shutDownHook);
         } catch (Exception e1) {
         }
-        hostsList.getRenderer().finish();
         //Everything is stopped, wait for collect termination
         try {
             for(Timer t: hostsList.getTimers()) {
@@ -87,6 +87,13 @@ public class Configuration {
             }
         } catch (InterruptedException e) {
         }
+        for(StoreFactory sf: propertiesManager.stores.values()) {
+            sf.stop();
+        }
+        if(hostsList.getRenderer() != null) {
+            hostsList.getRenderer().finish();            
+        }
+        propertiesManager.defaultStore.stop();
     }
 
     /**

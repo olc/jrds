@@ -1,6 +1,5 @@
 package jrds.configuration;
 
-import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
@@ -11,6 +10,7 @@ import java.util.List;
 import java.util.Map;
 
 import jrds.PropertiesManager;
+import jrds.factories.ArgFactory;
 import jrds.factories.xml.JrdsDocument;
 import jrds.factories.xml.JrdsElement;
 import jrds.webapp.RolesACL;
@@ -38,7 +38,7 @@ abstract class ConfigObjectBuilder<BuildObject> {
      * 
      * @param object The object to add a role to
      * @param n  The DOM tree where the xpath will look into
-     * @param xpath where to found the roles
+     * @param roleElements the role element
      */
     protected void doACL(WithACL object, JrdsDocument n, JrdsElement roleElements) {
         if(pm.security){
@@ -72,9 +72,10 @@ abstract class ConfigObjectBuilder<BuildObject> {
                 String element = dsContent.getNodeName();
                 String textValue = dsContent.getTextContent().trim();
                 Object value = textValue;
-                if( element.startsWith("collect")) {
-                    if("".equals(value))
+                if (element.startsWith("collect")) {
+                    if ("".equals(value))
                         value = null;
+                    dsMap.put("optional", Boolean.valueOf(dsContent.getAttribute("optional")));
                 }
                 else if("dsType".equals(element)) {
                     if( !"NONE".equals(textValue.toUpperCase()))
@@ -111,7 +112,7 @@ abstract class ConfigObjectBuilder<BuildObject> {
     /**
      * Apply a method on a object with the value found in the XML element
      * If the element is null, the method does nothing.
-     * @param element
+     * @param e
      * @param o
      * @param method
      * @return
@@ -129,7 +130,7 @@ abstract class ConfigObjectBuilder<BuildObject> {
     /**
      * Apply a method on a object with the value found in a collection of XML elements
      * If the element is null, the method does nothing.
-     * @param element
+     * @param e
      * @param o
      * @param method
      * @param argType
@@ -171,32 +172,19 @@ abstract class ConfigObjectBuilder<BuildObject> {
     public boolean setMethod(JrdsElement element, Object o, String method, Class<?> argType) throws SecurityException, NoSuchMethodException, IllegalArgumentException, IllegalAccessException, InvocationTargetException, InstantiationException{
         if(element == null)
             return false;
-        Constructor<?> c = null;
-        if(! argType.isPrimitive() ) {
-            c = argType.getConstructor(String.class);
-        }
-        else if(argType == Integer.TYPE) {
-            c = Integer.class.getConstructor(String.class);
-        }
-        else if(argType == Double.TYPE) {
-            c = Double.class.getConstructor(String.class);
-        }
-        else if(argType == Float.TYPE) {
-            c = Float.class.getConstructor(String.class);
-        }
 
-        String name = element.getTextContent().trim();
-        if(name != null) {
-            Method m;
-            try {
-                m = o.getClass().getMethod(method, argType);
-            } catch (NoSuchMethodException e) {
-                m = o.getClass().getMethod(method, Object.class);
-            }
-            m.invoke(o, c.newInstance(name));
-            return true;
+        String name = element.getTextContent();
+        if(name == null)
+            return false;
+
+        Method m;
+        try {
+            m = o.getClass().getMethod(method, argType);
+        } catch (NoSuchMethodException e) {
+            m = o.getClass().getMethod(method, Object.class);
         }
-        return false;
+        m.invoke(o, ArgFactory.ConstructFromString(argType, name.trim()));
+        return true;
     }
 
 }

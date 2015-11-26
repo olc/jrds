@@ -1,7 +1,6 @@
 
 package jrds;
 
-import java.io.IOException;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
@@ -93,11 +92,6 @@ public class HostsList extends StarterNode {
 
     public void configure(PropertiesManager pm) {
         started = false;
-        try {
-            jrds.JrdsLoggerConfiguration.configure(pm);
-        } catch (IOException e1) {
-            log(Level.ERROR, e1, "Unable to set log file to " + pm.logfile);
-        }
 
         if(pm.rrddir == null) {
             log(Level.ERROR, "Probes directory not configured, can't configure");
@@ -109,6 +103,7 @@ public class HostsList extends StarterNode {
             return;
         }
 
+        pm.configureStores();
         setTimeout(pm.timeout);
         setStep(pm.step);
 
@@ -125,8 +120,16 @@ public class HostsList extends StarterNode {
 
         log(Level.DEBUG, "Starting parsing descriptions");
         ConfigObjectFactory conf = new ConfigObjectFactory(pm);
+        conf.setArchiveSetMap();
         conf.setGraphDescMap();
-        conf.setProbeDescMap();
+        Map<String, ProbeDesc> allProbeDesc = conf.setProbeDescMap();
+        for(ProbeDesc pd: allProbeDesc.values()) {
+            for(ProbeMeta meta: ArgFactory.enumerateAnnotation(pd.getProbeClass(), ProbeMeta.class, StarterNode.class)) {
+                log(Level.TRACE, "new probe meta: %s", meta);
+                daList.add(meta.discoverAgent());
+            }           
+        }
+        log(Level.DEBUG, "Discover agents classes are %s", daList);
         conf.setMacroMap();
         for(Listener<?,?> l: conf.setListenerMap().values()) {
             registerStarter(l);
@@ -148,7 +151,7 @@ public class HostsList extends StarterNode {
                     p.configureStarters(pm);
                     try {
                         for(ProbeMeta meta: ArgFactory.enumerateAnnotation(p.getClass(), ProbeMeta.class, StarterNode.class)) {
-                            daList.add(meta.discoverAgent());
+                            log(Level.TRACE, "another probe meta: %s", meta);
                             timerStarterClasses.add(meta.timerStarter());
                             topStarterClasses.add(meta.topStarter());
                         }
@@ -185,7 +188,6 @@ public class HostsList extends StarterNode {
                 // Some probe are done outside of a starter
                 // Don't forget them
                 if(p.getHostList() == null) {
-                    log(Level.INFO, p.toString());
                     p.setParent(this);
                 }
             }
@@ -222,7 +224,7 @@ public class HostsList extends StarterNode {
         allTabs.add(new Tab("Administration", PropertiesManager.ADMINTAB) {
             @Override
             public String getJSCallback() {
-                return "setAdminTab";
+                return "adminTabCallback";
             }
         });
 
@@ -255,15 +257,25 @@ public class HostsList extends StarterNode {
     }
 
     /**
-     * @param started the started to set
+     * Ensure that all collects are stopped, some slow probes might need a little help
      */
-    public void stopTimers() {
+    public void stop() {
         started = false;
         if(collectTimer != null)
             collectTimer.cancel();
         collectTimer = null;
-        for(Starter s: this.topStarters) {
+        for(Starter s: topStarters) {
             s.doStop();
+        }
+        for(jrds.starter.Timer t: timers.values()) {
+            t.stopCollect();
+            for(HostStarter h: t.getAllHosts()) {
+                h.stopCollect();
+                for(Probe<?,?> p: h.getAllProbes()) {
+                    p.stopCollect();                    
+                }
+            }
+            t.interrupt();
         }
     }
 
@@ -360,14 +372,12 @@ public class HostsList extends StarterNode {
 
     void doCustomTabs(Map<String, Tab> customTabMap, Map<String, GraphTree> treeMap, Set<Tab> tabs) {
         if(! customTabMap.isEmpty()) {
-            Set<Tab> customTabs = new HashSet<Tab>(customTabMap.size());
             log(Level.DEBUG, "Tabs to add: %s", customTabMap.values());
             for(Tab t: customTabMap.values()) {
                 t.setHostlist(this);
                 GraphTree tabtree = t.getGraphTree();
                 if(tabtree != null)
                     treeMap.put(t.getName(), tabtree);
-                customTabs.add(t);
             }
         }
     }
@@ -421,7 +431,7 @@ public class HostsList extends StarterNode {
     private void checkRoles(GraphNode gn, String root, List<String> pathList) {
         StringBuilder path = new StringBuilder("/" + root);
         for(String pathElem: pathList) {
-            path.append("/").append(pathElem);
+            path.append('/').append(pathElem);
         }
         for(Filter f: filters.values()) {
             if(f.acceptGraph(gn, path.toString())) {

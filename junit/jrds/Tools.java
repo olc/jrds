@@ -7,6 +7,7 @@ import java.io.InputStream;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -18,6 +19,7 @@ import javax.xml.parsers.ParserConfigurationException;
 import javax.xml.xpath.XPath;
 import javax.xml.xpath.XPathFactory;
 
+import jrds.PropertiesManager.TimerInfo;
 import jrds.factories.xml.EntityResolver;
 import jrds.factories.xml.JrdsDocument;
 import jrds.starter.Timer;
@@ -30,7 +32,6 @@ import org.apache.log4j.LogManager;
 import org.apache.log4j.Logger;
 import org.apache.log4j.spi.LoggingEvent;
 import org.junit.rules.TemporaryFolder;
-import org.mortbay.jetty.testing.ServletTester;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.w3c.dom.Node;
@@ -46,8 +47,15 @@ final public class Tools {
         Locale.setDefault(new Locale("POSIX"));
         System.getProperties().setProperty("java.awt.headless","true");
         System.setProperty("java.io.tmpdir",  "tmp");
-        LogManager.getLoggerRepository().resetConfiguration();
-        JrdsLoggerConfiguration.jrdsAppender = new ConsoleAppender(new org.apache.log4j.SimpleLayout(), ConsoleAppender.SYSTEM_OUT);
+        LogManager.resetConfiguration();
+        //resetConfiguration is not enough
+        @SuppressWarnings("unchecked")
+        ArrayList<Logger> loggers = (ArrayList<Logger>)Collections.list(LogManager.getCurrentLoggers());
+        for (Logger l: loggers) {
+            l.removeAllAppenders();
+            l.setLevel(Level.OFF);
+        }
+        JrdsLoggerConfiguration.jrdsAppender = new ConsoleAppender(new org.apache.log4j.PatternLayout(JrdsLoggerConfiguration.DEFAULTLAYOUT), ConsoleAppender.SYSTEM_OUT);
         JrdsLoggerConfiguration.jrdsAppender.setName(JrdsLoggerConfiguration.APPENDERNAME);
         JrdsLoggerConfiguration.initLog4J();
     }
@@ -89,8 +97,7 @@ final public class Tools {
 
     static public JrdsDocument parseString(String s) throws Exception { 
         InputStream is = new ByteArrayInputStream(s.getBytes());
-        JrdsDocument d = Tools.parseRessource(is);
-        return d;
+        return Tools.parseRessource(is);
     }
 
     static public void setLevel(Logger logger, Level level, String... allLoggers) {
@@ -98,9 +105,10 @@ final public class Tools {
         //The system property override the code log level
         if(System.getProperty("jrds.testloglevel") != null){
             level = Level.toLevel(System.getProperty("jrds.testloglevel"));
-            logger.setLevel(level);
         }
-        logger.setLevel(level);
+        if(logger != null) {
+            logger.setLevel(level);            
+        }
         for(String loggerName: allLoggers) {
             Logger l = Logger.getLogger(loggerName);
             l.setLevel(level);
@@ -115,14 +123,7 @@ final public class Tools {
     }
 
     static public void setLevel(String[] allLoggers, Level level) {
-        Appender app = Logger.getLogger("jrds").getAppender(JrdsLoggerConfiguration.APPENDERNAME);
-        for(String loggerName: allLoggers) {
-            Logger l = Logger.getLogger(loggerName);
-            l.setLevel(level);
-            if(l.getAppender(JrdsLoggerConfiguration.APPENDERNAME) != null) {
-                l.addAppender(app);
-            }
-        }
+        setLevel(null, level, allLoggers);
     }
 
     static public Element appendElement(Node n, String name, Map<String, String> attributes) {
@@ -144,22 +145,6 @@ final public class Tools {
         n.appendChild(newNode);
 
         return newNode;
-    }
-
-    static public void getServer(Map<String, String> properties) {
-        ServletTester tester=new ServletTester();
-        tester.setContextPath("/");
-
-        for(Map.Entry<String, String> e: properties.entrySet()) {
-            System.setProperty("jrds." + e.getKey(), e.getValue());
-        }
-
-        Properties sp = System.getProperties();
-        for(Object  key: sp.keySet()) {
-            if(key.toString().startsWith("jrds.")) {
-                sp.remove(key);
-            }
-        }
     }
 
     static public URI pathToUrl(String pathname) {
@@ -185,6 +170,7 @@ final public class Tools {
         for(String loggername: loggers) {
             Logger logger = Logger.getLogger(loggername);
             logger.addAppender(ta);
+            logger.setLevel(Level.TRACE);
         }
         return logs;
     }
@@ -202,8 +188,10 @@ final public class Tools {
             pm.setProperty(key, value);
         }
         pm.update();
+        pm.configureStores();
         pm.libspath.clear();
-
+        pm.defaultStore.configureStore(pm, new Properties());
+        pm.defaultStore.start();
         return pm;
     }
 
@@ -213,6 +201,7 @@ final public class Tools {
         pm.setProperty("configdir", new File("tmp").getPath());
         pm.setProperty("rrddir", new File("tmp").getPath());
         pm.setProperty("autocreate", "false");
+        pm.setProperty("usepool", "false");
 
         return finishPm(pm, props);
     }
@@ -223,6 +212,7 @@ final public class Tools {
         pm.setProperty("configdir", testFolder.newFolder("config").getCanonicalPath());
         pm.setProperty("rrddir", testFolder.newFolder("rrddir").getCanonicalPath());
         pm.setProperty("autocreate", "true");
+        pm.setProperty("usepool", "false");
 
         return finishPm(pm, props);
     }
@@ -233,6 +223,17 @@ final public class Tools {
         ti.step = 300;
         ti.timeout = 10;
         Timer t = new Timer(Timer.DEFAULTNAME, ti);
-        return Collections.singletonMap(t.getName(), t);
+        Map<String, Timer> timerMap = new HashMap<String, Timer>(1);
+        timerMap.put(t.getName(), t);
+        return timerMap;
+    }
+
+    static public final Timer getDefaultTimer() {
+        TimerInfo ti = new PropertiesManager.TimerInfo();
+        ti.numCollectors = 1;
+        ti.slowCollectTime = 5;
+        ti.step = 300;
+        ti.timeout = 10;
+        return new Timer("TimerTester", ti);
     }
 }

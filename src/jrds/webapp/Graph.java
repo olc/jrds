@@ -1,9 +1,3 @@
-/*##########################################################################
- _##
- _##  $Id$
- _##
- _##########################################################################*/
-
 package jrds.webapp;
 
 import java.io.IOException;
@@ -18,6 +12,7 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
 import jrds.HostsList;
+import net.iharder.Base64;
 
 import org.apache.log4j.Logger;
 
@@ -72,12 +67,14 @@ public final class Graph extends JrdsServlet {
             res.setContentType("image/png");
             // No caching, the date might be in the future, a period is requested
             // So the image have short lifetime, just one step
+            int graphStep = graph.getNode().getProbe().getStep();
             if(p.period.getScale() != 0 || ! cache) {
-                res.addDateHeader("Expires", new Date().getTime() + getPropertiesManager().step * 1000);
+                res.addDateHeader("Expires", new Date().getTime() + graphStep * 1000);
             }
             res.addDateHeader("Last-Modified", graph.getEnd().getTime());
-            res.addHeader("content-disposition","inline; filename=" + graph.getPngName());
-            res.addHeader("ETag", jrds.Base64.encodeString(getServletName() + graph.hashCode()));
+            res.addHeader("Content-disposition","inline; filename=" + graph.getPngName());
+            String eTagBaseString = getServletName() + graph.hashCode();
+            res.addHeader("ETag", Base64.encodeBytes(eTagBaseString.getBytes()));
             ServletOutputStream out = res.getOutputStream();
             FileChannel indata = hl.getRenderer().sendInfo(graph);
             //If a cache file exist, try to be smart, but only if caching is allowed
@@ -96,7 +93,7 @@ public final class Graph extends JrdsServlet {
 
             if(logger.isTraceEnabled()) {
                 jrds.GraphNode node = hl.getGraphById(p.getId());
-                int wh = node.getGraphDesc().getDimension().height;
+                int wh = graph.getDimension().height;
                 int rh = graph.getRrdGraph().getRrdGraphInfo().getHeight();
                 logger.trace("Delta height:" + (rh - wh) + " for " + node.getGraphDesc());
                 Date finish = new Date();

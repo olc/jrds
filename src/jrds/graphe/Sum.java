@@ -1,6 +1,8 @@
 package jrds.graphe;
 
+import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Date;
 
 import jrds.AutonomousGraphNode;
 import jrds.GraphDesc;
@@ -8,10 +10,12 @@ import jrds.GraphNode;
 import jrds.HostsList;
 import jrds.PlottableMap;
 import jrds.Util;
+import jrds.store.ExtractInfo;
+import jrds.store.Extractor;
 
 import org.apache.log4j.Logger;
 import org.rrd4j.ConsolFun;
-import org.rrd4j.core.FetchData;
+import org.rrd4j.data.DataProcessor;
 import org.rrd4j.data.LinearInterpolator;
 import org.rrd4j.data.Plottable;
 
@@ -30,7 +34,7 @@ public class Sum extends AutonomousGraphNode {
         gd.setName(name);
         setGraphDesc(gd);
         getProbe().addGraph(this);
-    };
+    }
 
     public void configure(HostsList hl) {
         super.configure(hl);
@@ -41,7 +45,7 @@ public class Sum extends AutonomousGraphNode {
         for(String graphname: graphList) {
             g = hl.getGraphById(graphname.hashCode());
             if(g == null) {
-                logger.warn(Util.delayedFormatString("graph %s not found for sum %s", graphname, getName()));
+                logger.warn(Util.delayedFormatString("graph %s not found for sum '%s'", graphname, getName()));
             }
         }
         //The last graph found is used to clone the graphdesc and use it
@@ -66,56 +70,72 @@ public class Sum extends AutonomousGraphNode {
      */
     @Override
     public PlottableMap getCustomData() {
-        PlottableMap sumdata = new PlottableMap() {
+        return new PlottableMap() {
             @Override
             public void configure(long start, long end, long step) {
+                ExtractInfo ei = ExtractInfo.get()
+                        .make(new Date(start * 1000), new Date(end * 1000))
+                        .make(step)
+                        .make(ConsolFun.AVERAGE);
                 logger.debug(Util.delayedFormatString("Configuring the sum %s from %d to %d, step %d", Sum.this.getName(), start, end, step));
                 //Used to kept the last fetched data and analyse the
-                FetchData fd = null;
+                DataProcessor dp = null;
 
                 double[][] allvalues = null;
                 for(String name : graphList) {
                     GraphNode g = hl.getGraphById(name.hashCode());
                     logger.trace("Looking for " + name + " in graph base, and found " + g);
-                    if(g != null) {
-                        fd = g.getProbe().fetchData(ConsolFun.AVERAGE, start, end, step);
+                    if(g == null) {
+                        logger.error("Graph not found: " + name);
+                        continue;
+                    }
 
+                    try {
+                        dp = g.getPlottedDate(ei);
+                    } catch (IOException e) {
+                        logger.error("Failed to read " + g.getProbe());
+                        continue;
+                    }
+
+                    if(g != null) {
+                        Extractor ex = g.getProbe().fetchData();
+                        ex.fill(dp, ei);
+                        ex.release();
                         //First pass, no data to use
                         if(allvalues == null) {
-                            allvalues = (double[][]) fd.getValues().clone();
+                            allvalues = dp.getValues().clone();
                         }
                         //Next step, sum previous values
                         else {
-                            double[][] tempallvalues = fd.getValues();
+                            double[][] tempallvalues = dp.getValues();
                             for(int c = 0 ; c < tempallvalues.length ; c++) {
                                 for(int r = 0 ; r < tempallvalues[c].length; r++) {
                                     double v = tempallvalues[c][r];
                                     if ( ! Double.isNaN(v) ) {
                                         if(! Double.isNaN(allvalues[c][r]))
                                             allvalues[c][r] += v;
-                                        else    
+                                        else
                                             allvalues[c][r] = v;
                                     }
                                 }
                             }
                         }
                     }
-                    else {
-                        logger.error("Graph not found: " + name);
-                    }
                 }
-                if(fd != null) {
-                    long[] ts = fd.getTimestamps();
-                    String[] dsNames = fd.getDsNames();
-                    for(int i= 0; i < fd.getColumnCount(); i++) {
+                if(dp != null) {
+                    long[] ts = dp.getTimestamps();
+                    String[] dsNames = dp.getSourceNames();
+                    for(int i= 0; i < dsNames.length; i++) {
                         Plottable pl = new LinearInterpolator(ts, allvalues[i]);
                         put(dsNames[i], pl);
                         logger.trace(Util.delayedFormatString("Added %s to sum plottables", dsNames[i]));
                     }
                 }
+                else {
+                    logger.error(Util.delayedFormatString("Sum %s unusable, not graph found", Sum.this));
+                }
             }
         };
-        return sumdata;
     }
 
 }

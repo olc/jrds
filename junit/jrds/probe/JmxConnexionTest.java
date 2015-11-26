@@ -34,6 +34,7 @@ import jrds.HostInfo;
 import jrds.PropertiesManager;
 import jrds.Tools;
 import jrds.starter.HostStarter;
+import jrds.starter.SocketFactory;
 
 import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
@@ -53,7 +54,7 @@ public class JmxConnexionTest {
 
         public JrdsMBeanInfo(String protocol, String host, int port) throws Exception {
             String path = "/";
-            if (protocol == "rmi") {
+            if (protocol.equals("rmi")) {
                 rmiRegistry = java.rmi.registry.LocateRegistry
                         .createRegistry(port);
                 path = "/jndi/rmi://" + host + ":" + port + "/jmxrmi";
@@ -119,7 +120,7 @@ public class JmxConnexionTest {
         Tools.configure();
         logger.setLevel(Level.TRACE);
         Tools.setLevel(new String[] {JmxConnexionTest.class.getName(), JMXConnection.class.getName(), "jrds.Starter"}, logger.getLevel());
-    };
+    }
 
     @After
     public void finished() throws Exception {
@@ -177,7 +178,9 @@ public class JmxConnexionTest {
                 return true;
             }
         };
+        host.setTimeout(1);
         JMXConnection cnx = getCnx(proto, port);
+        host.registerStarter(new SocketFactory());
         host.registerStarter(cnx);
 
         host.configureStarters(new PropertiesManager());

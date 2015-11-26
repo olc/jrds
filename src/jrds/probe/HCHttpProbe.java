@@ -12,6 +12,7 @@ import org.apache.http.HttpResponse;
 import org.apache.http.client.ClientProtocolException;
 import org.apache.http.client.HttpClient;
 import org.apache.http.client.methods.HttpGet;
+import org.apache.http.util.EntityUtils;
 import org.apache.log4j.Level;
 
 /**
@@ -29,26 +30,28 @@ import org.apache.log4j.Level;
 @ProbeMeta(
         timerStarter=jrds.probe.HttpClientStarter.class
         )
-public abstract class HCHttpProbe extends HttpProbe {
+public abstract class HCHttpProbe extends HttpProbe implements SSLProbe {
 
     @Override
     public Map<String, Number> getNewSampleValues() {
         log(Level.DEBUG, "Getting %s", getUrl());
         HttpClientStarter httpstarter = find(HttpClientStarter.class);
         HttpClient cnx = httpstarter.getHttpClient();
+        HttpEntity entity = null;
         try {
             HttpGet hg = new HttpGet(getUrl().toURI());
             HttpResponse response = cnx.execute(hg);
             if(response.getStatusLine().getStatusCode() != 200) {
                 log(Level.ERROR, "Connection to %s fail with %s", getUrl(), response.getStatusLine().getReasonPhrase());
+                EntityUtils.consumeQuietly(response.getEntity());
                 return null;
             }
-            HttpEntity entity = response.getEntity();
+            entity = response.getEntity();
             if(entity == null) {
                 log(Level.ERROR, "Not response body to %s",getUrl());
                 return null;
             }
-            InputStream is = entity.getContent();;
+            InputStream is = entity.getContent();
             Map<String, Number> vars = parseStream(is);
             is.close();
             return vars;
@@ -60,6 +63,10 @@ public abstract class HCHttpProbe extends HttpProbe {
             log(Level.ERROR, e, "Unable to read %s because: %s", getUrl(), e.getMessage());
         } catch (URISyntaxException e) {
             log(Level.ERROR, "unable to parse %s", getUrl());
+        } finally {
+            if(entity != null) {
+                EntityUtils.consumeQuietly(entity);                
+            }
         }
 
         return null;

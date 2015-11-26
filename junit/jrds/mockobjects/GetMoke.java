@@ -6,24 +6,37 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.io.PrintWriter;
 import java.io.UnsupportedEncodingException;
+import java.lang.reflect.InvocationTargetException;
 import java.security.Principal;
+import java.util.Collections;
+import java.util.Collection;
 import java.util.Enumeration;
 import java.util.Locale;
 import java.util.Map;
 
+import javax.servlet.AsyncContext;
+import javax.servlet.DispatcherType;
 import javax.servlet.RequestDispatcher;
+import javax.servlet.ServletContext;
+import javax.servlet.ServletException;
 import javax.servlet.ServletInputStream;
 import javax.servlet.ServletOutputStream;
+import javax.servlet.ServletRequest;
+import javax.servlet.ServletResponse;
+import javax.servlet.WriteListener;
 import javax.servlet.http.Cookie;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import javax.servlet.http.HttpSession;
+import javax.servlet.http.HttpUpgradeHandler;
+import javax.servlet.http.Part;
 
 import jrds.GraphDesc;
 import jrds.Probe;
 import jrds.ProbeDesc;
 import jrds.HostInfo;
 import jrds.starter.HostStarter;
+import jrds.store.RrdDbStoreFactory;
 
 import org.rrd4j.DsType;
 
@@ -40,10 +53,12 @@ public class GetMoke {
         return pd;
     }
 
-    static public Probe<?,?> getProbe() {
+    static public Probe<?,?> getProbe() throws InvocationTargetException {
         Probe<?,?> p = new MokeProbe<String, Number>();
         p.setPd(getPd());
         p.setHost(new HostStarter(getHost()));
+        Map<String, String> empty = Collections.emptyMap();
+        p.setMainStore(new RrdDbStoreFactory(), empty);
         return p;
     }
 
@@ -63,6 +78,16 @@ public class GetMoke {
                 public void write(int b) throws IOException { stream.write(b); }
                 public void write(byte[] theData) throws IOException { stream.write(theData); }
                 public void write(byte[] theData, int theOffset, int theLength) throws IOException { stream.write(theData, theOffset, theLength); }
+                @Override
+                public boolean isReady() {
+                    // TODO Auto-generated method stub
+                    return false;
+                }
+                @Override
+                public void setWriteListener(WriteListener arg0) {
+                    // TODO Auto-generated method stub
+                    
+                }
             };
             public void addCookie(Cookie arg0) { }
             public void addDateHeader(String arg0, long arg1) { }
@@ -96,6 +121,11 @@ public class GetMoke {
             public void setContentLength(int arg0) { }
             public void setContentType(String arg0) { type = arg0; }
             public void setLocale(Locale arg0) { }
+            public void setContentLengthLong(long arg0) { }
+            public String getHeader(String arg0) { return null; }
+            public Collection<String> getHeaderNames() { return null; }
+            public Collection<String> getHeaders(String arg0) { return null; }
+            public int getStatus() { return 0; }
         };
     }
 
@@ -103,7 +133,7 @@ public class GetMoke {
         StringBuffer buffer = new StringBuffer("/");
         if( ctxPathArgs != null && ctxPathArgs.length > 0) {
             for(String element: ctxPathArgs)
-                buffer.append("/").append(element); 
+                buffer.append('/').append(element); 
         }
         buffer.delete(0, 1);
         final String pathInfo = buffer.toString();
@@ -119,9 +149,9 @@ public class GetMoke {
             public Cookie[] getCookies() { return null; }
             public long getDateHeader(String arg0)  { return 0; }
             public String getHeader(String arg0) { return null; }
-            @SuppressWarnings({ "rawtypes" })
+            @SuppressWarnings({ "rawtypes", "unchecked" })
             public Enumeration getHeaderNames() { return null; }
-            @SuppressWarnings({ "rawtypes" })
+            @SuppressWarnings({ "rawtypes", "unchecked" })
             public Enumeration getHeaders(String arg0) { return null; }
             public int getIntHeader(String arg0) { return 0; }
             public String getMethod() { return null; }
@@ -142,7 +172,7 @@ public class GetMoke {
             public boolean isRequestedSessionIdValid() { return false; }
             public boolean isUserInRole(String arg0)  { return false; }
             public Object getAttribute(String arg0) { return null; }
-            @SuppressWarnings({ "rawtypes" })
+            @SuppressWarnings({ "rawtypes", "unchecked" })
             public Enumeration getAttributeNames() { return null; }
             public String getCharacterEncoding() { return null; }
             public int getContentLength() { return 0; }
@@ -152,7 +182,7 @@ public class GetMoke {
             public String getLocalName() { return null; }
             public int getLocalPort() { return 0; }
             public Locale getLocale()  { return null; }
-            @SuppressWarnings({ "rawtypes" })
+            @SuppressWarnings({ "rawtypes", "unchecked" })
             public Enumeration getLocales() { return null; }
             public String getParameter(String arg0) { 
                 String[] array = parameters.get(arg0);
@@ -160,9 +190,9 @@ public class GetMoke {
                     return array[0];
                 return null;
             }
-            @SuppressWarnings({ "rawtypes" })
+            @SuppressWarnings({ "rawtypes", "unchecked" })
             public Map getParameterMap() { return parameters; }
-            @SuppressWarnings({ "rawtypes" })
+            @SuppressWarnings({ "rawtypes", "unchecked" })
             public Enumeration getParameterNames()  { return null; }
             public String[] getParameterValues(String arg0) { return null; }
             public String getProtocol() { return null; }
@@ -179,6 +209,26 @@ public class GetMoke {
             public void removeAttribute(String arg0) { }
             public void setAttribute(String arg0, Object arg1) {  }
             public void setCharacterEncoding(String arg0) throws UnsupportedEncodingException { }
+            public AsyncContext getAsyncContext() {return null; }
+            public long getContentLengthLong() { return 0; }
+            public DispatcherType getDispatcherType() { return null; }
+            public ServletContext getServletContext() { return null; }
+            public boolean isAsyncStarted() { return false; }
+            public boolean isAsyncSupported() { return false; }
+            public AsyncContext startAsync() throws IllegalStateException { return null; }
+            public AsyncContext startAsync(ServletRequest arg0,
+                    ServletResponse arg1) throws IllegalStateException { return null; }
+            public boolean authenticate(HttpServletResponse arg0)
+                    throws IOException, ServletException { return false; }
+            public String changeSessionId() { return null; }
+            public Part getPart(String arg0) throws IOException,
+                    ServletException { return null; }
+            public Collection<Part> getParts() throws IOException,
+                    ServletException { return null; }
+            public void login(String arg0, String arg1) throws ServletException { }
+            public void logout() throws ServletException { }
+            public <T extends HttpUpgradeHandler> T upgrade(Class<T> arg0)
+                    throws IOException, ServletException { return null; }
         };
     }
 }

@@ -1,14 +1,15 @@
 package jrds;
 
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.channels.Channels;
-import java.nio.channels.FileChannel;
 import java.nio.channels.ReadableByteChannel;
 import java.util.HashMap;
 import java.util.Map;
 
+import jrds.mockobjects.EmptyStoreFactory;
 import jrds.webapp.ACL.AdminACL;
 import jrds.webapp.RolesACL;
 
@@ -39,12 +40,16 @@ public class TestPropertiesManager {
         String oldtmpdirpath = System.getProperty("java.io.tmpdir");
         File newtmpdir = testFolder.newFile("tmp");
         newtmpdir.delete();
+        newtmpdir.mkdir();
         System.setProperty("java.io.tmpdir", newtmpdir.getPath());
         PropertiesManager pm = new PropertiesManager();
+        pm.setProperty("configdir", testFolder.getRoot().getCanonicalPath());
+        pm.setProperty("rrddir", testFolder.getRoot().getCanonicalPath());
+        pm.update();
         System.setProperty("java.io.tmpdir", oldtmpdirpath);
         File jrdstmpdir = new File(newtmpdir, "jrds");
-        Assert.assertEquals(jrdstmpdir, pm.tmpdir);
-        Assert.assertFalse("tmpdir should not be created", newtmpdir.exists());
+        Assert.assertEquals(jrdstmpdir.getCanonicalPath(), pm.tmpdir.getCanonicalPath());
+        Assert.assertTrue("tmpdir should have been created", newtmpdir.exists());
     }
 
     @Test
@@ -68,7 +73,7 @@ public class TestPropertiesManager {
         }
     }
 
-    @Test
+    @Test(expected = IllegalArgumentException.class)
     public void testConfigNoAutoCreate() throws IOException, IllegalArgumentException, SecurityException, IllegalAccessException, NoSuchFieldException {
         PropertiesManager pm = new PropertiesManager();
 
@@ -81,21 +86,14 @@ public class TestPropertiesManager {
         }
         pm.setProperty("autocreate", "false");
         pm.update();
-
-        Assert.assertEquals("tmp/jrds", pm.tmpdir.toString());
-        Assert.assertNull(pm.configdir);
-        Assert.assertNull(pm.rrddir);
-
-        //None was created
-        for(Map.Entry<String, File> e: dirMap.entrySet()) {
-            File dir = e.getValue();
-            Assert.assertFalse(dir.exists());
-        }
     }
 
     @Test
-    public void testSecurity() {
+    public void testSecurity() throws IOException {
         PropertiesManager pm = new PropertiesManager();
+        pm.setProperty("configdir", testFolder.getRoot().getCanonicalPath());
+        pm.setProperty("rrddir", testFolder.getRoot().getCanonicalPath());
+        pm.setProperty("tmpdir", testFolder.getRoot().getCanonicalPath());
         pm.setProperty("security", "true");
         pm.setProperty("adminrole", "role1");
         pm.setProperty("defaultroles", " role2 ,role3");
@@ -117,9 +115,12 @@ public class TestPropertiesManager {
         InputStream is = Tools.class.getResourceAsStream("/ressources/log4j.properties");
         ReadableByteChannel isChannel = Channels.newChannel(is);
         File log4jprops = testFolder.newFile("log4j.properties");
-        FileChannel tmpProp = new java.io.FileOutputStream(log4jprops).getChannel();
-        tmpProp.transferFrom(isChannel, 0, 4096);
+        FileOutputStream fos = new java.io.FileOutputStream(log4jprops);
+        fos.getChannel().transferFrom(isChannel, 0, 4096);
         PropertiesManager pm = new PropertiesManager();
+        pm.setProperty("configdir", testFolder.getRoot().getCanonicalPath());
+        pm.setProperty("rrddir", testFolder.getRoot().getCanonicalPath());
+        pm.setProperty("tmpdir", testFolder.getRoot().getCanonicalPath());
         pm.setProperty("log4jpropfile", log4jprops.getCanonicalPath());
         pm.update();
         logger.debug("log file created");
@@ -127,6 +128,45 @@ public class TestPropertiesManager {
         File logFile = new File("tmp/log4j.log");
         Assert.assertTrue("Log4j file not created", logFile.canRead());
         logFile.delete();
+        fos.close();
     }
-    
+
+    @Test
+    public void testDefaultStore() throws IOException {
+        PropertiesManager pm = new PropertiesManager();
+        pm.setProperty("configdir", testFolder.getRoot().getCanonicalPath());
+        pm.setProperty("rrddir", testFolder.getRoot().getCanonicalPath());
+        pm.setProperty("tmpdir", testFolder.getRoot().getCanonicalPath());
+        pm.update();
+        pm.configureStores();
+        Assert.assertEquals("Default store configuration failed", jrds.store.RrdDbStoreFactory.class, pm.defaultStore.getClass());
+    }
+
+    @Test
+    public void testDefaultStoreEmpty() throws IOException {
+        PropertiesManager pm = new PropertiesManager();
+        pm.setProperty("configdir", testFolder.getRoot().getCanonicalPath());
+        pm.setProperty("rrddir", testFolder.getRoot().getCanonicalPath());
+        pm.setProperty("tmpdir", testFolder.getRoot().getCanonicalPath());
+        pm.setProperty("storefactory", jrds.store.CacheStoreFactory.class.getCanonicalName());
+        pm.update();
+        pm.configureStores();
+        Assert.assertEquals("Default store configuration failed", jrds.store.CacheStoreFactory.class, pm.defaultStore.getClass());
+    }
+
+    @Test
+    public void testDefaultStoreList() throws IOException {
+        PropertiesManager pm = new PropertiesManager();
+        pm.setProperty("configdir", testFolder.getRoot().getCanonicalPath());
+        pm.setProperty("rrddir", testFolder.getRoot().getCanonicalPath());
+        pm.setProperty("tmpdir", testFolder.getRoot().getCanonicalPath());
+        pm.setProperty("stores", "cache");
+        pm.setProperty("rrdbackend", "NIO");
+        pm.setProperty("store.cache.factory", EmptyStoreFactory.class.getCanonicalName());
+        pm.update();
+        pm.configureStores();
+        Assert.assertEquals("Addition store configuration failed", 1, pm.stores.size());
+        Assert.assertEquals("Addition store configuration failed", EmptyStoreFactory.class, pm.stores.get("cache").getClass());
+    }
+
 }

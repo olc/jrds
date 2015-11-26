@@ -2,6 +2,7 @@ package jrds.webapp;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -16,7 +17,7 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
 import jrds.Util;
-import jrds.Base64.OutputStream;
+import net.iharder.Base64;
 
 import org.apache.log4j.Logger;
 import org.json.JSONException;
@@ -26,7 +27,7 @@ import org.json.JSONException;
  */
 public class JSonPack extends HttpServlet {
     static final private Logger logger = Logger.getLogger(JSonPack.class);
-    static final public List<String> JSONKEYS =  Arrays.asList(new String[] {"id", "autoperiod", "filter", "host", "path", "begin", "end", "max", "min", "tab", "sort", "tree"});
+    static final public List<String> JSONKEYS =  Arrays.asList("id", "autoperiod", "filter", "host", "path", "begin", "end", "max", "min", "tab", "sort", "tree");
     static final public Map<String, Integer> JSONDICT = new HashMap<String, Integer>(JSONKEYS.size());
     static {
         for(int i= JSONKEYS.size() -1; i >= 0; i--) {
@@ -53,7 +54,7 @@ public class JSonPack extends HttpServlet {
         int read;
         while((read = postDataStream.read(bufferin)) > 0 ) {
             postDataBuffer.write(bufferin, 0, read);
-        };
+        }
         String postData = postDataBuffer.toString();
         logger.debug(Util.delayedFormatString("Post data: %s", postData));
 
@@ -79,23 +80,37 @@ public class JSonPack extends HttpServlet {
         }
 
         ByteArrayOutputStream packedDataBuffer = new ByteArrayOutputStream(len);
-        GZIPOutputStream gzipBuffer = new GZIPOutputStream(new OutputStream(packedDataBuffer), len);
+        GZIPOutputStream gzipBuffer = new GZIPOutputStream(new Base64.OutputStream(packedDataBuffer), len);
         gzipBuffer.write(paramsClean.toString().getBytes());
         gzipBuffer.close();
 
-        char separator = '?';
+        // get or build referer
         String referer = request.getHeader("Referer");
-        try {
-            URL refererUrl = new URL(referer);
-            if( refererUrl.getQuery() != null)
-                separator = '&';
-        } catch (Exception e) {
-            String host = request.getHeader("Host");
-            String contextPath = request.getContextPath();
-            referer = "http://" + host + contextPath + "/";
+        if (referer != null) {
+            try {
+                new URL(referer); // make sure valid URL
+            } catch (MalformedURLException e) {
+                referer = null;
+                logger.warn("Malformed referer URL: " + referer);
+            }
+        }
+        if (referer == null) {
+            referer = "http://" + request.getHeader("Host") + request.getContextPath() + "/";
         }
 
-        String packedurl = referer + separator + "p=" + new String(packedDataBuffer.toByteArray()).substring(GZIPHEADER.length()).replace('=', '!').replace('/', '$').replace('+', '*');
+        // Make sure we do not have any queryString, we received the state as a JSON
+        // object and the only parameter we should return is the packed version
+        // of this state as 'p' parameter
+
+        // It will prevent also the issue where, if you create a state URL from another
+        // state URL, you would have multiple 'p' parameter.
+
+        int querySep = referer.indexOf('?');
+        if (querySep != -1) {
+            referer = referer.substring(0, querySep);
+        }
+
+        String packedurl = referer + "?p=" + new String(packedDataBuffer.toByteArray()).substring(GZIPHEADER.length()).replace('=', '!').replace('/', '$').replace('+', '*');
 
         response.getOutputStream().print(packedurl);
         response.flushBuffer();

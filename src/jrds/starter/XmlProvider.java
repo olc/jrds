@@ -102,11 +102,11 @@ public class XmlProvider extends Starter {
                 if(xpath == null || "".equals(xpath))
                     continue;
                 Node n = (Node)xpather.evaluate(xpath, d, XPathConstants.NODE);
-                double value = 0;
+                Double value;
                 if(n != null) {
                     log(Level.TRACE, "%s", n);
-                    value = jrds.Util.parseStringNumber(n.getTextContent(), Double.NaN).doubleValue();
-                    oldMap.put(xpath, Double.valueOf(value));
+                    value = jrds.Util.parseStringNumber(n.getTextContent(), Double.NaN);
+                    oldMap.put(xpath, value);
                 }
             } catch (XPathExpressionException e) {
                 log(Level.ERROR, "Invalid XPATH : " + xpath + " for " + this);
@@ -115,7 +115,6 @@ public class XmlProvider extends Starter {
             }
         }
         log(Level.TRACE, "Values found: %s", oldMap);
-        return;
     }
 
     public Document getDocument(InputSource stream) {
@@ -123,10 +122,7 @@ public class XmlProvider extends Starter {
         Document d = null;
         log(Level.TRACE, "%s %s %s started %s@%s", stream, dbuilder, isStarted(), getClass().getName(), Integer.toHexString(hashCode()));
         try {
-            try {
-                dbuilder.reset();
-            } catch (UnsupportedOperationException e) {
-            }
+            dbuilder.reset();
             d = dbuilder.parse(stream);
             log(Level.TRACE, "just parsed a %s", d.getDocumentElement().getTagName());
         } catch (SAXException e) {
@@ -151,10 +147,7 @@ public class XmlProvider extends Starter {
      */
     public Document getDocument() {
         DocumentBuilder dbuilder = localDocumentBuilder.get();
-        try {
-            dbuilder.reset();
-        } catch (UnsupportedOperationException e) {
-        }
+        dbuilder.reset();
         return dbuilder.newDocument();
     }
 

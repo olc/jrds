@@ -49,18 +49,19 @@ public abstract class DiscoverAgent {
                 parent.appendChild(input);
             }
         };
-        public abstract void  doNode(JrdsElement parent, FieldInfo fi);
-    };
+        public abstract void doNode(JrdsElement parent, FieldInfo fi);
+    }
 
     public static final class FieldInfo {
         public String id;
         public String label;
         public String value = "";
         public DojoType dojoType;
-    };
+    }
 
     private final Logger namedLogger;
     final Set<Class<?>> validClasses;
+    private int timeout;
 
     protected DiscoverAgent(String name, Class<?>... validClasses) {
         namedLogger = Logger.getLogger("jrds.DiscoverAgent." + name);
@@ -73,7 +74,7 @@ public abstract class DiscoverAgent {
     /**
      * Do some specific discover that can't be done on enumerated probes
      * @param hostname
-     * @param hostElement
+     * @param hostEleme
      * @param probdescs
      * @param request
      */
@@ -90,7 +91,6 @@ public abstract class DiscoverAgent {
      * @param hostElement
      * @param summary
      * @param request
-     * @return
      */
     public abstract void addProbe(JrdsElement hostElement, ProbeDescSummary summary, HttpServletRequest request);
 
@@ -129,7 +129,7 @@ public abstract class DiscoverAgent {
 
     /**
      * This method add a probe to the current host document
-     * @param hostDom the host document
+     * @param hostElement the host element
      * @param probe the Name of the probe
      * @param label the label of the probe
      * @param argsTypes a list of type for the argument
@@ -148,7 +148,7 @@ public abstract class DiscoverAgent {
 
     /**
      * This method add a probe to the current host document
-     * @param hostDom the host document
+     * @param hostElement the host element
      * @param probe the Name of the probe
      * @param argsTypes a list of type for the argument
      * @param argsValues a list of value for the argument
@@ -170,7 +170,6 @@ public abstract class DiscoverAgent {
                 JrdsElement arg = element.addElement("attr");
                 arg.setAttribute("name", bean.getKey());
                 arg.setTextContent(bean.getValue());
-
             }
         }
         if(argsTypes != null && argsTypes.size() > 0 && argsTypes.size() == argsValues.size()) {
@@ -191,5 +190,12 @@ public abstract class DiscoverAgent {
         jrds.Util.log(this, namedLogger, l, null, format, elements);
     }
 
+    public int getTimeout() {
+        return timeout;
+    }
+
+    public void setTimeout(int timeout) {
+        this.timeout = timeout;
+    }
 
 }

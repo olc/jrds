@@ -4,6 +4,7 @@ import java.lang.reflect.InvocationTargetException;
 import java.util.Collections;
 import java.util.Map;
 
+import jrds.GenericBean;
 import jrds.GraphDesc;
 import jrds.Probe;
 import jrds.ProbeDesc;
@@ -81,12 +82,12 @@ public class ProbeDescBuilder extends ConfigObjectBuilder<ProbeDesc> {
                     logger.trace(Util.delayedFormatString("Adding graph: %s", graphName));
                 }
                 else {
-                    logger.warn(Util.delayedFormatString("Unknown graph %s for probe %s", graphName, pd.getName()));
+                    logger.info(Util.delayedFormatString("Missing graph %s for probe %s", graphName, pd.getName()));
                 }
             }
         }
         if(! withgraphs) {
-            logger.warn(Util.delayedFormatString("No valid graph found for %s", pd.getName()));
+            logger.debug(Util.delayedFormatString("No graph defined for probe %s", pd.getName()));
         }
 
         for(JrdsElement specificNode: root.getChildElementsByName("specific")) {
@@ -101,12 +102,20 @@ public class ProbeDescBuilder extends ConfigObjectBuilder<ProbeDesc> {
 
         JrdsElement requesterElement = root.getElementbyName("snmpRequester");
         if(requesterElement != null) {
-            String snmpRequester = requesterElement.getTextContent().trim();
-            if(snmpRequester != null && ! "".equals(snmpRequester)) {
-                pd.addSpecific("requester", snmpRequester);
-                logger.trace(Util.delayedFormatString("Specific added: requester='%s'", snmpRequester));
-
+            String snmpRequester = requesterElement.getTextContent();
+            if (snmpRequester != null) {
+                snmpRequester = snmpRequester.trim();
+                if (!snmpRequester.isEmpty()) {
+                    pd.addSpecific("requester", snmpRequester);
+                    logger.trace(Util.delayedFormatString("Specific added: requester='%s'", snmpRequester));
+                }
             }
+        }
+
+        //Populating the custom beans map
+        for(JrdsElement attr: root.getChildElementsByName("customattr")) {
+            String beanName = attr.getAttribute("name");
+            pd.addBean(new GenericBean.CustomBean(beanName));
         }
 
         //Populating the default arguments map
@@ -114,8 +123,10 @@ public class ProbeDescBuilder extends ConfigObjectBuilder<ProbeDesc> {
         if(argsNode != null) {
             for(JrdsElement attr: argsNode.getChildElementsByName("attr")) {
                 String beanName = attr.getAttribute("name");
+                String finalBeanString = attr.getAttribute("delayed");
+                boolean finalBean = "true".equalsIgnoreCase(finalBeanString);
                 String beanValue = attr.getTextContent();
-                pd.addDefaultArg(beanName, beanValue);
+                pd.addDefaultBean(beanName, beanValue, finalBean);
             }
         }
 

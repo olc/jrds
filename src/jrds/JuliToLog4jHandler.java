@@ -18,7 +18,20 @@ import org.apache.log4j.Priority;
  */
 public class JuliToLog4jHandler extends Handler {
 
-    public JuliToLog4jHandler() {
+    public static void catchLogger(String logger, org.apache.log4j.Level level) {
+        //If not already configured, we filter it
+        JrdsLoggerConfiguration.configureLogger(logger, level);
+        java.util.logging.Logger jilogger = java.util.logging.Logger.getLogger(logger);
+        jilogger.setUseParentHandlers(false);
+        for(Handler h : jilogger.getHandlers()) {
+            jilogger.removeHandler(h);
+        }
+        jilogger.addHandler(new JuliToLog4jHandler());
+        //Log4j will filter
+        jilogger.setLevel(Level.ALL);
+    }
+
+    private JuliToLog4jHandler() {
         super();
     }
 

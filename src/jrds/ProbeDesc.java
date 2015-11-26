@@ -1,6 +1,5 @@
 package jrds;
 
-import java.beans.PropertyDescriptor;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
@@ -8,9 +7,11 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
@@ -38,20 +39,30 @@ import org.w3c.dom.Element;
 public class ProbeDesc implements Cloneable {
     static final private Logger logger = Logger.getLogger(ProbeDesc.class);
 
+    public static class DefaultBean {
+        public final String value;
+        public final boolean delayed;
+        DefaultBean(String value, boolean delayed) {
+            this.value = value;
+            this.delayed = delayed;
+        }
+    }
+
     static public final double MINDEFAULT = 0;
     static public final double MAXDEFAULT = Double.NaN;
 
     private long heartBeatDefault = 600;
     private Map<String, DsDesc> dsMap;
-    private Map<String, String> specific = new HashMap<String, String>();;
+    private Map<String, String> specific = new HashMap<String, String>();
     private String probeName;
     private String name;
     private final Collection<String> graphesList = new ArrayList<String>();
     private Class<? extends Probe<?,?>> probeClass = null;
-    private Map<String, String> defaultsArgs = null;
+    private Map<String, ProbeDesc.DefaultBean> defaultsBeans = Collections.emptyMap();
     private float uptimefactor = (float) 1.0;
     private Map<String, Double> defaultValues = new HashMap<String,Double>(0);
-    private Map<String, PropertyDescriptor> beans = Collections.emptyMap();
+    private Map<String, GenericBean> beans = new HashMap<String, GenericBean>(0);
+    private final Set<String> optionals = new HashSet<String>(0);
 
     private static final class DsDesc {
         public DsType dsType;
@@ -70,7 +81,7 @@ public class ProbeDesc implements Cloneable {
     }
 
     /**
-     * Create a new Probe Description, with <it>size<it> elements in prevision
+     * Create a new Probe Description, with <em>size</em> elements in prevision
      * @param size estimated elements number
      */
     public ProbeDesc(int size) {
@@ -201,6 +212,13 @@ public class ProbeDesc implements Cloneable {
         if(valuesMap.containsKey("maxValue")) {
             max = jrds.Util.parseStringNumber(valuesMap.get("maxValue").toString(), MAXDEFAULT);
         }
+        if (valuesMap.containsKey("optional") && valuesMap.get("optional") instanceof Boolean) {
+            boolean optional = (Boolean) valuesMap.get("optional");
+            if (optional) {
+                optionals.add(name);
+            }
+        }
+
         dsMap.put(name, new DsDesc(type, heartbeat, min, max, collectKey));
     }
 
@@ -240,7 +258,7 @@ public class ProbeDesc implements Cloneable {
         Map<String, String> retValue = new LinkedHashMap<String, String>(dsMap.size());
         for(Map.Entry<String, DsDesc> e: dsMap.entrySet()) {
             DsDesc dd =  e.getValue();
-            if(dd.collectKey != null  && dd.collectKey instanceof String  && ! "".equals((String) dd.collectKey))
+            if(dd.collectKey != null  && dd.collectKey instanceof String  && ! "".equals(dd.collectKey))
                 retValue.put((String)dd.collectKey, e.getKey());
         }
         return retValue;
@@ -358,16 +376,24 @@ public class ProbeDesc implements Cloneable {
     }
 
     public void setProbeClass(Class<? extends Probe<?,?>> probeClass) throws InvocationTargetException {
-        beans = ArgFactory.getBeanPropertiesMap(probeClass, Probe.class);
+        beans.putAll(ArgFactory.getBeanPropertiesMap(probeClass, Probe.class));
         this.probeClass = probeClass;
     }
 
-    public Map<String, PropertyDescriptor> getBeanMap() {
-        return beans;
+    public Iterable<GenericBean> getBeans() {
+        return new Iterable<GenericBean>() {
+            public Iterator<GenericBean> iterator() {
+                return beans.values().iterator();
+            }
+        };
     }
 
-    public Collection<PropertyDescriptor> getBeans() {
-        return beans.values();
+    public GenericBean getBean(String name) {
+        return beans.get(name);
+    }
+
+    public void addBean(GenericBean bean) {   
+        beans.put(bean.getName(), bean);
     }
 
     public String getName() {
@@ -386,17 +412,20 @@ public class ProbeDesc implements Cloneable {
         specific.put(name, value);
     }
 
-    public void addDefaultArg(String beanName, String beanValue) throws InvocationTargetException{
-        if(defaultsArgs == null) 
-            defaultsArgs = new HashMap<String, String>();
+    public void addDefaultBean(String beanName, String beanValue, boolean finalBean) throws InvocationTargetException{
+        ProbeDesc.DefaultBean attr = new  ProbeDesc.DefaultBean(beanValue, finalBean);
+        if(defaultsBeans.size() == 0) 
+            defaultsBeans = new HashMap<String, ProbeDesc.DefaultBean>();
         if( beans.containsKey(beanName)) {
-            defaultsArgs.put(beanName, beanValue);
-            logger.trace(Util.delayedFormatString("Adding bean %s=%s to default args", beanName, beanValue));
+            defaultsBeans.put(beanName, attr);
+            logger.trace(Util.delayedFormatString("Adding bean %s=%s to default beans", beanName, beanValue));
         }
     }
 
-    public Map<String, String> getDefaultArgs() {
-        return defaultsArgs;
+    public Map<String, ProbeDesc.DefaultBean> getDefaultBeans() {
+        Map<String, ProbeDesc.DefaultBean> beans = new HashMap<String, ProbeDesc.DefaultBean>(defaultsBeans.size());
+        beans.putAll(defaultsBeans);
+        return beans;
     }
 
     /**
@@ -424,8 +453,8 @@ public class ProbeDesc implements Cloneable {
         DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
         DocumentBuilder builder = factory.newDocumentBuilder();
         Document document = builder.newDocument();
-        Element root = 
-                (Element) document.createElement("probedesc"); 
+        Element root =
+                document.createElement("probedesc");
         document.appendChild(root);
         root.appendChild(document.createElement("name")).setTextContent(name);
         if(probeName != null)
@@ -471,9 +500,16 @@ public class ProbeDesc implements Cloneable {
      */
     @Override
     public Object clone() throws CloneNotSupportedException {
-        ProbeDesc newpd = (ProbeDesc) super.clone();
-        return newpd;
+        return (ProbeDesc) super.clone();
     }
-
+    
+    /**
+     * Return true if the given datasource was associated with an optional collect string
+     * @param dsName
+     * @return
+     */
+    boolean isOptional(String dsName){
+        return optionals.contains(dsName);
+    }
 
 }

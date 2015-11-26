@@ -47,9 +47,14 @@ public class TrapListener extends Listener<CommandResponderEvent, OID> {
                 UdpAddress listenAddress = new UdpAddress(port);
                 transport = new DefaultUdpTransportMapping(listenAddress, true);
             }
-            snmp = new Snmp(transport);
-            snmp.addCommandResponder(trapReceiver);
-            transport.listen();
+            if (transport != null) {
+                snmp = new Snmp(transport);
+                snmp.addCommandResponder(trapReceiver);
+                transport.listen();
+            } else {
+                log(Level.ERROR, "unsupported UDP listener protocol: %s", proto);
+                return false;
+            }
             return super.start();
         } catch (IOException e) {
             log(Level.ERROR, e, "failed to start the trap listener: %s", e.getMessage());

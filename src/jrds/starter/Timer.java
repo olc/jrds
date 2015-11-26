@@ -2,14 +2,23 @@ package jrds.starter;
 
 import java.util.Date;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.NoSuchElementException;
+import java.util.Queue;
+import java.util.Set;
 import java.util.TimerTask;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.Future;
+import java.util.concurrent.FutureTask;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.RunnableFuture;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -20,7 +29,30 @@ import org.apache.log4j.Level;
 
 public class Timer extends StarterNode {
 
-    public final static String DEFAULTNAME = "_default";
+    private class CollectCallable implements Callable<Object> {
+
+        private final HostStarter host;
+
+        CollectCallable(HostStarter host) {
+            this.host = host;
+        }
+
+        @Override
+        public String toString() {
+            return host.getRunningname();
+        }
+
+        @Override
+        public Object call() throws Exception {
+            log(Level.DEBUG, "Collect all stats for host %s", host.getName());
+            String collectName = Timer.this.name  + "/" + "JrdsCollect-" + host.getName();
+            host.setRunningname(collectName);
+            host.collectAll();
+            host.setRunningname(collectName + ":notrunning");
+            return null;
+        }
+
+    };
 
     public static final class Stats implements Cloneable {
         Stats() {
@@ -42,18 +74,22 @@ public class Timer extends StarterNode {
         }
     }
 
+    public final static String DEFAULTNAME = "_default";
+
     private final Map<String, HostStarter> hostList = new HashMap<String, HostStarter>();
     private Semaphore collectMutex = new Semaphore(1);
     private final Stats stats = new Stats();
     private final int numCollectors;
     private final String name;
-    private TimerTask collector;
+    private final Queue<Future<Object>> running = new ConcurrentLinkedQueue<>();
+    private ThreadPoolExecutor tpool;
 
     public Timer(String name, PropertiesManager.TimerInfo ti) {
         super();
         this.name = name;
         setTimeout(ti.timeout);
         setStep(ti.step);
+        setSlowCollectTime(ti.slowCollectTime);
         this.numCollectors = ti.numCollectors;
     }
 
@@ -75,8 +111,10 @@ public class Timer extends StarterNode {
     }
 
     public void startTimer(java.util.Timer collectTimer) {
-        collector = new TimerTask () {
+        TimerTask collector = new TimerTask () {
             public void run() {
+                // The collect is done in a different thread
+                // So a collect failure will no prevent other collect from running
                 Thread subcollector = new Thread("Collector/" + Timer.this.name) {
                     @Override
                     public void run() {
@@ -85,8 +123,9 @@ public class Timer extends StarterNode {
                         } catch (RuntimeException e) {
                             Timer.this.log(Level.FATAL, e, "A fatal error occured during collect: %s", e.getMessage());
                         }
-                    }
+                    }                    
                 };
+                subcollector.setDaemon(true);
                 subcollector.start();
             }
         };
@@ -94,6 +133,16 @@ public class Timer extends StarterNode {
     }
 
     public void collectAll() {
+        // Build the list of host that will be collected
+        Set<Callable<Object>> toSchedule = new HashSet<Callable<Object>>();
+        for(final HostStarter host: hostList.values()) {
+            Callable<Object> runCollect = new CollectCallable(host);
+            toSchedule.add(runCollect);
+        }
+        if(toSchedule.size() == 0) {
+            log(Level.INFO, "skipping timer, empty");
+            return;
+        }
         log(Level.DEBUG, "One collect is launched");
         Date start = new Date();
         try {
@@ -105,73 +154,75 @@ public class Timer extends StarterNode {
             log(Level.FATAL, "A collect start was interrupted");
             return;
         }
+        final AtomicInteger counter = new AtomicInteger(0);
+        // Generate threads with a default name
+        ThreadFactory tf = new ThreadFactory() {
+            public Thread newThread(Runnable r) {
+                Thread t = new Thread(r);
+                t.setName(Timer.this.name + "/CollectorThread" + counter.getAndIncrement());
+                t.setDaemon(true);
+                return t;
+            }
+        };
+        synchronized (running) {
+            // Generate a ThreadPoolExecutor where Runnable.toString return
+            // Callable.toString
+            tpool = new ThreadPoolExecutor(numCollectors, numCollectors,
+                    0L, TimeUnit.MILLISECONDS,
+                    new ArrayBlockingQueue<Runnable>(toSchedule.size()),
+                    tf) {
+
+                @Override
+                protected <T> RunnableFuture<T> newTaskFor(
+                        final Callable<T> callable) {
+                    return new FutureTask<T>(callable){
+                        @Override
+                        public String toString() {
+                            return callable.toString();
+                        }
+                    };
+                }
+            };
+        }
+        running.clear();
+        startCollect();
         try {
-            final AtomicInteger counter = new AtomicInteger(0);
-            ExecutorService tpool =  Executors.newFixedThreadPool(numCollectors, 
-                    new ThreadFactory() {
-                public Thread newThread(Runnable r) {
-                    Thread t = new Thread(r, Timer.this.name  + "/CollectorThread" + counter.getAndIncrement());
-                    t.setDaemon(true);
-                    log(Level.DEBUG, "New thread name:" + t.getName());
-                    return t;
-                }
-            }
-                    );
-            startCollect();
-            for(final HostStarter host: hostList.values()) {
-                if( ! isCollectRunning())
-                    break;
-                Runnable runCollect = new Runnable() {
-                    public void run() {
-                        log(Level.DEBUG, "Collect all stats for host " + host.getName());
-                        String threadName = Timer.this.name  + "/" + "JrdsCollect-" + host.getName();
-                        Thread.currentThread().setName(threadName);
-                        host.collectAll();
-                        Thread.currentThread().setName(threadName + ":finished");
-                    }
-                    @Override
-                    public String toString() {
-                        return Thread.currentThread().toString();
-                    }
-                };
-                try {
-                    tpool.execute(runCollect);
-                }
-                catch(RejectedExecutionException ex) {
-                    log(Level.DEBUG, "collector thread dropped for host " + host.getName());
-                }
-            }
-            tpool.shutdown();
             try {
-                tpool.awaitTermination(getStep() - getTimeout() * 2 , TimeUnit.SECONDS);
+                if(isCollectRunning()) {
+                    List<Future<Object>> scheduled = tpool.invokeAll(toSchedule, getStep() - getTimeout() * 2 , TimeUnit.SECONDS);
+                    running.addAll(scheduled);
+                    tpool.shutdown();
+                    tpool.awaitTermination(getStep() - getTimeout() * 2 , TimeUnit.SECONDS);
+                }
+            } catch(RejectedExecutionException ex) {
+                log(Level.DEBUG, "collector thread refused");
             } catch (InterruptedException e) {
-                log(Level.WARN, "Collect interrupted");
+                log(Level.INFO, "Collect interrupted");
             }
             stopCollect();
             if( ! tpool.isTerminated()) {
                 //Second chance, we wait for the time out
                 boolean emergencystop = false;
                 try {
-                    emergencystop = tpool.awaitTermination(getTimeout(), TimeUnit.SECONDS);
+                    emergencystop = ! tpool.awaitTermination(getTimeout(), TimeUnit.SECONDS);
                 } catch (InterruptedException e) {
-                    log(Level.WARN, "Collect interrupted in last chance");
+                    log(Level.INFO, "Collect interrupted in last chance");
                 }
-                if(! emergencystop) {
-                    log(Level.WARN, "Some task still alive, needs to be killed");
+                if(emergencystop) {
+                    log(Level.INFO, "Some task still alive, needs to be killed");
                     //Last chance to commit results
-                    List<Runnable> timedOut = tpool.shutdownNow();
-                    if(! timedOut.isEmpty()) {
-                        log(Level.WARN, "Still " + timedOut.size() + " waiting probes: ");
-                        for(Runnable r: timedOut) {
-                            log(Level.WARN, r.toString());
-                        }
-                    }
+                    tpool.shutdownNow();
+                    dumpCollectHanged();
                 }
             }
         } catch (RuntimeException e) {
-            log(Level.ERROR, "problem while collecting data: ", e);
+            log(Level.ERROR, e, "problem while collecting data: %s", e);
         }
         finally {
+            synchronized (running) {
+                tpool.shutdown();
+                tpool = null;
+            }
             collectMutex.release();             
         }
         Date end = new Date();
@@ -212,6 +263,33 @@ public class Timer extends StarterNode {
      */
     public Stats getStats() {
         return stats;
+    }
+
+    public void interrupt() {
+        log(Level.DEBUG, "timer interrupted");
+        synchronized (running) {
+            if (tpool != null) {
+                tpool.shutdownNow();
+            }
+        }
+        dumpCollectHanged();
+    }
+
+    private void dumpCollectHanged() {
+        while(! running.isEmpty()) {
+            try {
+                Future<Object> waiting = running.iterator().next();
+                if(waiting.isDone() || waiting.isCancelled()) {
+                    running.remove(waiting);
+                } else {
+                    waiting.cancel(true);
+                    log(Level.INFO, "%s blocked", waiting.toString());
+                    Thread.sleep(10);
+                }
+            } catch (NoSuchElementException | InterruptedException e) {
+            }
+        }
+
     }
 
 }

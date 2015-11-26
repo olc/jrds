@@ -6,9 +6,12 @@ import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Map;
 
+import jrds.GraphDesc.Dimension;
+import jrds.store.ExtractInfo;
 import jrds.webapp.ACL;
 import jrds.webapp.WithACL;
 
+import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
 import org.rrd4j.data.DataProcessor;
 import org.rrd4j.data.Plottable;
@@ -30,6 +33,9 @@ public class Graph implements WithACL {
     public Graph(GraphNode node) {
         this.node = node;
         addACL(node.getACL());
+        Period p = new Period();
+        setStart(p.getBegin());
+        setEnd(p.getEnd());
     }
 
     public Graph(GraphNode node, Date begin, Date start) {
@@ -46,8 +52,6 @@ public class Graph implements WithACL {
     public int hashCode() {
         final int PRIME = 31;
         int result = 1;
-        //result = PRIME * result + ((end == null) ? 0 : end.hashCode());
-        //result = PRIME * result + ((start == null) ? 0 : start.hashCode());
         result = PRIME * result + end.hashCode();
         result = PRIME * result + start.hashCode();
         long temp;
@@ -113,6 +117,7 @@ public class Graph implements WithACL {
         try {
             long startsec = getStartSec();
             long endsec = getEndSec();
+            ExtractInfo ei = ExtractInfo.get().make(start, end);
             graphDef.setStartTime(startsec);
             graphDef.setEndTime(endsec);
             PlottableMap customData = node.getCustomData();
@@ -120,20 +125,20 @@ public class Graph implements WithACL {
                 long step = Math.max((endsec - startsec) / gd.getWidth(), 1);
                 customData.configure(startsec, endsec, step);
             }
-            setGraphDefData(graphDef, node.getProbe(), customData);
+            setGraphDefData(graphDef, node.getProbe(), ei, customData);
             if(gd.withLegend())
                 addlegend(graphDef);
-        } catch (IllegalArgumentException e) {
-            logger.error("Impossible to create graph definition, invalid date definition from " + start + " to " + end + " : " + e);
+        } catch (RuntimeException e) {
+            Util.log(this, logger, Level.ERROR, e, "Impossible to create graph definition: ", e);
         }
     }
-    
-    protected void setGraphDefData(RrdGraphDef graphDef, Probe<?, ?> defProbe,
+
+    protected void setGraphDefData(RrdGraphDef graphDef, Probe<?, ?> defProbe, ExtractInfo ei,
             Map<String, ? extends Plottable> customData) {
         GraphDesc gd = getGraphDesc();
-        gd.fillGraphDef(graphDef, node.getProbe(), customData);        
+        gd.fillGraphDef(graphDef, node.getProbe(), ei, customData);        
     }
-    
+
     protected GraphDesc getGraphDesc() {
         return node.getGraphDesc();
     }
@@ -162,7 +167,6 @@ public class Graph implements WithACL {
     /**
      * Provide a RrdGraphDef with template resolved for the node
      * @return a RrdGraphDef with some default values
-     * @throws IOException
      */
     public RrdGraphDef getEmptyGraphDef() {
         RrdGraphDef retValue = getGraphDesc().getEmptyGraphDef();
@@ -190,15 +194,8 @@ public class Graph implements WithACL {
      * @throws IOException
      */
     public DataProcessor getDataProcessor() throws IOException {
-        PlottableMap customData = node.getCustomData();
-        if(customData != null) {
-            long startsec = getStartSec();
-            long endsec = getEndSec();
-            customData.configure(startsec, endsec, 1);            
-        }
-        DataProcessor dp = getGraphDesc().getPlottedDatas(node.getProbe(), customData, start.getTime() / 1000, end.getTime() / 1000);
-        dp.processData();
-        return dp;
+        ExtractInfo ei = ExtractInfo.get().make(start, end);
+        return getNode().getPlottedDate(ei);
     }
 
     public String getPngName() {
@@ -291,4 +288,14 @@ public class Graph implements WithACL {
     public ACL getACL() {
         return acl;
     }
+
+    /**
+     * Return the dimension calculated by the graph desc
+     * can (and should) be overridden with custom graph classes 
+     * @return the dimension of the graphic object
+     */
+    public Dimension getDimension() {
+        return getGraphDesc().getDimension();
+    }
+
 }

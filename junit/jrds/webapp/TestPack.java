@@ -6,18 +6,19 @@ import java.util.Properties;
 
 import jrds.Period;
 import jrds.Tools;
-import org.junit.Assert;
 
 import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
+import org.eclipse.jetty.http.HttpTester.Request;
+import org.eclipse.jetty.http.HttpTester.Response;
+import org.eclipse.jetty.servlet.ServletTester;
 import org.json.JSONArray;
+import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
-import org.mortbay.jetty.testing.HttpTester;
-import org.mortbay.jetty.testing.ServletTester;
 
 public class TestPack {
     static final private Logger logger = Logger.getLogger(TestPack.class);
@@ -29,8 +30,9 @@ public class TestPack {
 
     @BeforeClass
     static public void configure() throws Exception {
+        System.setProperty("org.eclipse.jetty.util.log.class", "org.eclipse.jetty.util.log.Slf4jLog");
+        System.setProperty("org.eclipse.jetty.LEVEL", "DEBUG");
         Tools.configure();
-        System.setProperty("org.mortbay.log.class", jrds.standalone.JettyLogger.class.getName());
         Tools.setLevel(logger, Level.TRACE, ParamsBean.class.getName(), JSonQueryParams.class.getName(), JSonPack.class.getName());
     }
 
@@ -42,18 +44,13 @@ public class TestPack {
         tester.start();
     }
 
-    private String packunpack(String inparams) throws IOException, Exception {
-        HttpTester request = new HttpTester();
-        HttpTester response = new HttpTester();
-        request.setMethod("POST");
-        request.setHeader("Host","tester");
-        request.setHeader("Referer","http://tester/");
-        request.setURI("/jsonpack");
-        request.setVersion("HTTP/1.0");
-        request.setContent(inparams);
-
-        response.parse(tester.getResponses(request.generate()));
-        Assert.assertEquals(200, response.getStatus());
+    private String packunpack(final String inparams) throws IOException, Exception {
+        Response response = ToolsWebApp.doRequestPost(tester, "http://tester/jsonpack", new ToolsWebApp.MakePostContent() {
+            @Override
+            void fillRequest(Request r) {
+                r.setContent(inparams);
+            }
+        }, 200);
 
         URL packedurl = new URL(response.getContent());
 
@@ -71,16 +68,14 @@ public class TestPack {
 
     @Test
     public void testPack2() throws IOException, Exception {
-        JrdsJSONObject params = new JrdsJSONObject( packunpack("{'begin':'1','end':'60000', 'min':'0', 'max':'10', 'autoperiod':'0','filter':'','host':'hosttest','treeType':'tree','id':'-744958554','path':['All filters','bougie','Services','jdbc:postgresql://appartland.eu/postgres','xwiki']}"));
+        JrdsJSONObject params = new JrdsJSONObject( packunpack("{'begin':'1000','end':'60000', 'min':'0', 'max':'10', 'autoperiod':'0','filter':'','host':'hosttest','treeType':'tree','id':'-744958554','path':['All filters','bougie','Services','jdbc:postgresql://appartland.eu/postgres','xwiki']}"));
         Assert.assertEquals(0, params.get("autoperiod"));
         Assert.assertEquals("0", params.get("min"));
         Assert.assertEquals("10", params.get("max"));
-
-        Period p = new Period(params.getString("begin"), params.getString("end"));
+        Period p = new Period(params.get("begin").toString(), params.get("end").toString());
         logger.trace(p);
-        //		Assert.assertEquals(60 *1000, p.getBegin().getTime());
-        //		Assert.assertEquals(3600 * 1000, p.getEnd().getTime());
-
+        Assert.assertEquals(1000, p.getBegin().getTime());
+        Assert.assertEquals(60000, p.getEnd().getTime());
     }
 
     @Test

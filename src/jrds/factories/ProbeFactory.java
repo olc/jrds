@@ -2,7 +2,6 @@ package jrds.factories;
 
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -21,19 +20,16 @@ import org.apache.log4j.Logger;
 public class ProbeFactory {
 
     private final Logger logger = Logger.getLogger(ProbeFactory.class);
-    final private List<String> probePackages = new ArrayList<String>(5);
     private Map<String, ProbeDesc> probeDescMap;
     private Map<String, GraphDesc> graphDescMap;
 
     /**
-     * Private constructor
-     * @param b 
+     * @param probeDescMap
+     * @param graphDescMap
      */
     public ProbeFactory(Map<String, ProbeDesc> probeDescMap, Map<String, GraphDesc> graphDescMap) {
         this.probeDescMap = probeDescMap;
         this.graphDescMap = graphDescMap;
-
-        probePackages.add("");
     }
 
     /**
@@ -42,7 +38,7 @@ public class ProbeFactory {
      * @return A probe
      */
     public  Probe<?,?> makeProbe(String probeName) {
-        ProbeDesc pd = (ProbeDesc) probeDescMap.get(probeName);
+        ProbeDesc pd = probeDescMap.get(probeName);
         if(pd == null) {
             logger.error("Probe named " + probeName + " not found");
             return null;
@@ -52,15 +48,16 @@ public class ProbeFactory {
 
     /**
      * Create an probe, provided a probe description
-     * @param ProbeDesc a probe description
+     * @param pd a probe description
      * @return A probe
      */
     public  Probe<?,?> makeProbe(ProbeDesc pd) {
         Class<? extends Probe<?,?>> probeClass = pd.getProbeClass();
         if(probeClass == null) {
             logger.error("Invalid probe description " + pd.getName() + ", probe class name not found");
+            return null;
         }
-        Probe<?,?> retValue = null;
+        Probe<?,?> retValue;
         try {
             Constructor<? extends Probe<?,?>> c = probeClass.getConstructor();
             retValue = c.newInstance();
@@ -70,7 +67,7 @@ public class ProbeFactory {
             return null;
         }
         catch (ClassCastException ex) {
-            logger.warn("didn't get a Probe but a " + retValue.getClass().getName());
+            logger.warn("Error during probe instantiation: " + ex.getMessage());
             return null;
         } catch (Exception ex) {
             Throwable showException = ex;

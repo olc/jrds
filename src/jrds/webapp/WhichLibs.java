@@ -16,7 +16,7 @@ import javax.xml.transform.TransformerFactoryConfigurationError;
 
 import jrds.HostsList;
 import jrds.PropertiesManager;
-import jrds.StoreOpener;
+import jrds.store.RrdDbStoreFactory;
 
 import org.apache.log4j.Logger;
 
@@ -48,12 +48,15 @@ public final class WhichLibs extends JrdsServlet {
             out.println("    Server info: " + ctxt.getServerInfo());
             out.println();
 
-            String[] openned = StoreOpener.getInstance().getOpenFiles();
-            out.println("" + StoreOpener.getInstance().getOpenFileCount() + " opened rrd: ");
-            for(String rrdPath: openned) {
-                out.println("   " + rrdPath + ": " + StoreOpener.getOpenCount(rrdPath));
+            if(getPropertiesManager().defaultStore instanceof RrdDbStoreFactory) {
+                RrdDbStoreFactory factory = (RrdDbStoreFactory) getPropertiesManager().defaultStore;
+                String[] openned = factory.getOpenFiles();
+                out.println("" + openned.length + " opened rrd: ");
+                for(String rrdPath: openned) {
+                    out.println("   " + rrdPath + ": " + factory.getOpenCount(rrdPath));
+                }
+                out.println();          
             }
-            out.println();
 
             PropertiesManager pm = getPropertiesManager();
             out.println("Temp dir: " + pm.tmpdir);
@@ -94,7 +97,7 @@ public final class WhichLibs extends JrdsServlet {
     }
 
     private String resolv(String name, Object o) {
-        String retValue = "";
+        String retValue;
         if(o != null)
             retValue = resolv(name, o.getClass());
         else
@@ -104,7 +107,7 @@ public final class WhichLibs extends JrdsServlet {
 
 
     private String resolv(String name, Class<?> c) {
-        String retValue = "";
+        String retValue;
         try {
             retValue = name + " found in " + locateJar(c);
         } catch (RuntimeException e) {
